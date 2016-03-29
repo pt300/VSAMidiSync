@@ -72,7 +72,17 @@ typedef enum {
 	AboutBox
 } VSA_IDs;
 
+typedef enum {
+	Normal,
+	Minimized,
+	Hidden
+} WSA_WINODW;
+
 HRESULT GetLongProperty(IDispatch*, VSA_IDs, LONG *);
-HRESULT SetStringProperty(IDispatch*, VSA_IDs, wchar_t *);
+HRESULT SetStringProperty(IDispatch*, VSA_IDs, LPWSTR);
+HRESULT SetShortProperty(IDispatch *, VSA_IDs, SHORT);
+HRESULT PutValue(IDispatch *, VSA_IDs, VARIANT *);
+HRESULT OpenDialog(LPWSTR, LPCWSTR);
+
 
 #endif //MIDI3_MAIN_H
