@@ -15,14 +15,17 @@
 #include <objbase.h>
 
 #define VSA_PATH L"C:\\Program Files\\Brookshire Software\\Visual Show Automation Hobbyist\\VSA.EXE"
-
+#ifdef DEBUG
 #define STATUS(NAME, STAT) printf("%s: ", NAME); if(STAT == S_OK) printf("[SUCCESS]\n"); else{\
 							printf("[FAIL] 0x%lX\n", STAT);\
 							LPSTR buff;\
 FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS, NULL, STAT, 0, (LPTSTR) &buff, 0, NULL);\
 							printf("%s", buff);\
 							exit(1);}
-
+#endif
+#ifndef DEBUG
+#define STATUS(a, b) if(b != S_OK) {printf("\nError was encountered. Shutting down.\n"); exit(0);}
+#endif
 
 /*
 typedef struct IVSAs IVSA;
@@ -56,6 +59,7 @@ struct IVSAs {
 
 
 //THIS TOTALLY WILL NEVER FAIL!!!!!
+//I could use GetIDsOfNames but fuck me
 typedef enum {
 	vsaPath = 1,
 	routinePath,
@@ -78,11 +82,17 @@ typedef enum {
 	Hidden
 } WSA_WINODW;
 
-HRESULT GetLongProperty(IDispatch*, VSA_IDs, LONG *);
-HRESULT SetStringProperty(IDispatch*, VSA_IDs, LPWSTR);
+HRESULT Reload(IDispatch *);
+HRESULT TogglePlay(IDispatch *, BOOL *);
+HRESULT CallStupidPlayMethodFuckingHell(IDispatch *);
+HRESULT GetLongFromMethod(IDispatch *, VSA_IDs, LONG *);
+HRESULT GetBoolFromMethod(IDispatch *, VSA_IDs, BOOL *);
+HRESULT GetNothingFromMethod(IDispatch *, VSA_IDs);
+HRESULT SetStringProperty(IDispatch *, VSA_IDs, LPWSTR);
 HRESULT SetShortProperty(IDispatch *, VSA_IDs, SHORT);
 HRESULT PutValue(IDispatch *, VSA_IDs, VARIANT *);
 HRESULT OpenDialog(LPWSTR, LPCWSTR);
+HRESULT CallMethod(IDispatch *, VSA_IDs, VARIANT *);
 
 
 #endif //MIDI3_MAIN_H

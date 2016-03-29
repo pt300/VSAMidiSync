@@ -32,6 +32,75 @@ int main(void) {
 	free(path);
 	res = SetShortProperty(DISP_OBJ, showWindow, Minimized);
 	STATUS("SetShortProperty for showWindow", res);
+	BOOL status;
+	res = GetBoolFromMethod(DISP_OBJ, Create, &status);
+	STATUS("GetBoolFromMethod Create()", res);
+#ifdef DEBUG
+	printf("Control is owned by us: %s\n", status?"YES":"NO");
+#endif
+	Sleep(1000);
+	STATUS("Sleep for 1 second", S_OK);
+	printf("Apparently everything works!\n"
+			"To exit press [q]. Play/pause [spacebar]. Stop [s]. Reload VSA [r].\n");
+	long frame;
+	long frame_prev;
+	BOOL loop = TRUE;
+	BOOL playing = FALSE;
+	BOOL showingP = FALSE;
+	while(loop) {
+		Sleep(50);
+		if(_kbhit())
+			switch(_getch()) {
+				case 'q':
+					loop = 0;
+					break;
+				case ' ':
+					TogglePlay(DISP_OBJ, &playing);
+					break;
+				case 's':
+					GetNothingFromMethod(DISP_OBJ, Stop);
+					break;
+				case 'r':
+					Reload(DISP_OBJ);
+					break;
+					//TODO: Implement MIDI Output change
+				default:
+					break;
+			}
+		GetLongFromMethod(DISP_OBJ, GetPlaybackStatus, &frame);
+		if(frame == frame_prev) {
+			playing = FALSE;
+			if(!showingP) {
+				printf(" P");
+				showingP = TRUE;
+			}
+			continue;
+		}
+		else {
+			playing = TRUE;
+			showingP = FALSE;
+		}
+		frame_prev = frame;
+		if(frame == -2) {
+			printf("An error occured\n");
+			break;
+		}
+		printf("\r                   \r");
+		if(frame == -1)
+			printf("STOPPED");
+		else {
+			long cf = frame % 30;
+			long sec = frame / 30 % 60;
+			long min = frame / (30*60) % 60;
+			long hour = frame / (30*60*60);
+			printf("%.2li:%.2li:%.2li.%.2li", hour, min, sec, cf);
+		}
+	}
+	if(_kbhit())
+		getch();
+	printf("\nShutting down...\n");
+	res = GetNothingFromMethod(DISP_OBJ, Destroy);
+	STATUS("GetNothingFromMethod Destroy", res);
 	DISP_OBJ->lpVtbl->Release(DISP_OBJ);
 	STATUS("Release IDispatch", res);
 	k->lpVtbl->Release(k);
@@ -39,17 +108,68 @@ int main(void) {
 	OleUninitialize();
 }
 
+HRESULT Reload(IDispatch *dispatch) {
+	HRESULT res;
+	BOOL status;
+	res = GetNothingFromMethod(dispatch, Destroy);
+	STATUS("GetNothingFromMethod Destroy", res);
+	res = GetBoolFromMethod(dispatch, Create, &status);
+	STATUS("GetBoolFromMethod Create()", res);
+#ifdef DEBUG
+	printf("Control is owned by us: %s\n", status?"YES":"NO");
+#endif
+	Sleep(1000);
+	STATUS("Sleep for 1 second", S_OK);
+	return res;
+}
 
-HRESULT GetLongProperty(IDispatch* dispatch, VSA_IDs dispid, LONG *valueReceiver){
-	HRESULT v;
+HRESULT TogglePlay(IDispatch *dispatch, BOOL *state) {
+	if(*state)
+		return GetNothingFromMethod(dispatch, Pause);
+	else
+		return CallStupidPlayMethodFuckingHell(dispatch);
+}
+
+HRESULT CallStupidPlayMethodFuckingHell(IDispatch *dispatch) {
+	VARIANT *result = malloc(sizeof(VARIANT));
+	VARIANT *args = malloc(sizeof(VARIANT)*2);
+	args[0].vt = VT_BOOL;
+	args[0].boolVal = FALSE;
+	args[1].vt = VT_I2;
+	args[1].iVal = 6;
 	DISPPARAMS dp = {0};
-	VARIANT vr;
-	VariantInit(&vr);
-	v = dispatch->lpVtbl->Invoke(dispatch, dispid, &IID_NULL, LOCALE_SYSTEM_DEFAULT, DISPATCH_PROPERTYGET, &dp, &vr, NULL, NULL);
-	valueReceiver = malloc(sizeof(long));
-	if (V_VT(&vr) == VT_I4)
-		*valueReceiver = V_I4(&vr);
-	VariantClear(&vr);
+	dp.cArgs = 2;
+	dp.rgvarg = args;
+	HRESULT v = dispatch->lpVtbl->Invoke(dispatch, Play, &IID_NULL, LOCALE_SYSTEM_DEFAULT, DISPATCH_METHOD, &dp, result, NULL, NULL);
+	free(result);
+	free(args);
+	return v;
+}
+
+HRESULT GetLongFromMethod(IDispatch *dispatch, VSA_IDs dispid, LONG *out){
+	VARIANT *result = malloc(sizeof(VARIANT));
+	HRESULT v = CallMethod(dispatch, dispid, result);
+	if(v != S_OK)
+		return v;
+	*out = result->lVal; //totally safe guys! totally safe!
+	free(result);
+	return v;
+}
+
+HRESULT GetBoolFromMethod(IDispatch *dispatch, VSA_IDs dispid, BOOL *out) {
+	VARIANT *result = malloc(sizeof(VARIANT));
+	HRESULT v = CallMethod(dispatch, dispid, result);
+	if(v != S_OK)
+		return v;
+	*out = result->boolVal; //totally safe guys! totally safe!
+	free(result);
+	return v;
+}
+
+HRESULT GetNothingFromMethod(IDispatch *dispatch, VSA_IDs dispid) { //creative af
+	VARIANT *result = malloc(sizeof(VARIANT));
+	HRESULT v = CallMethod(dispatch, dispid, result);
+	free(result);
 	return v;
 }
 
@@ -88,6 +208,11 @@ HRESULT PutValue(IDispatch *dispatch, VSA_IDs dispid, VARIANT *varValue) {
 	v = dispatch->lpVtbl->Invoke(dispatch, dispid, &IID_NULL, LOCALE_SYSTEM_DEFAULT, DISPATCH_PROPERTYPUT, &dp, NULL, NULL, NULL);
 	free(dispidNamed);
 	return v;
+}
+
+HRESULT CallMethod(IDispatch *dispatch, VSA_IDs dispid, VARIANT *varValue) {
+	DISPPARAMS dp = {0};
+	return dispatch->lpVtbl->Invoke(dispatch, dispid, &IID_NULL, LOCALE_SYSTEM_DEFAULT, DISPATCH_METHOD, &dp, varValue, NULL, NULL);
 }
 
 HRESULT OpenDialog(LPWSTR path, LPCWSTR filter) {
