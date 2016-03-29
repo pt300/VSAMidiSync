@@ -16,6 +16,13 @@
 
 #define VSA_PATH L"C:\\Program Files\\Brookshire Software\\Visual Show Automation Hobbyist\\VSA.EXE"
 
+#define STATUS(NAME, STAT) printf("%s: ", NAME); if(STAT == S_OK) printf("[SUCCESS]\n"); else{\
+							printf("[FAIL] 0x%lX\n", STAT);\
+							LPSTR buff;\
+FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS, NULL, STAT, 0, (LPTSTR) &buff, 0, NULL);\
+							printf("%s", buff);\
+							exit(1);}
+
 
 /*
 typedef struct IVSAs IVSA;
@@ -47,6 +54,8 @@ struct IVSAs {
 };
 */
 
+
+//THIS TOTALLY WILL NEVER FAIL!!!!!
 typedef enum {
 	vsaPath = 1,
 	routinePath,
@@ -63,7 +72,7 @@ typedef enum {
 	AboutBox
 } VSA_IDs;
 
-HRESULT GetLongProperty(IDispatch*, DISPID, LONG *);
-HRESULT SetStringProperty(IDispatch*, DISPID, wchar_t *);
+HRESULT GetLongProperty(IDispatch*, VSA_IDs, LONG *);
+HRESULT SetStringProperty(IDispatch*, VSA_IDs, wchar_t *);
 
 #endif //MIDI3_MAIN_H
