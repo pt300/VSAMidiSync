@@ -2,9 +2,6 @@
 // Created by patryk on 25.03.16.
 //
 
-//#include <unknown.h>
-#define INITGUID 1
-
 #include <ocidl.h>
 #include "main.h"
 
@@ -31,7 +28,6 @@ int main(void) {
 		if(h == S_OK)
 			printf("successfully\n");
 		else
-			S_OK;
 			printf("rip 0x%lx\n", h);
 		DISP_OBJ->lpVtbl->Release(DISP_OBJ);
 	}
