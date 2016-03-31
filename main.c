@@ -2,10 +2,6 @@
 // Created by patryk on 25.03.16.
 //
 
-#define INITGUID 1 //force define of GUIDs
-#define UNICODE 1
-#define _UNICODE 1
-
 #include "main.h"
 DEFINE_GUID(IID_VSA, 0xD69EBDF7, 0x494B, 0x11D5, 0x8D, 0x2D, 0x00, 0x20, 0x78, 0x15, 0x1F, 0x21);
 
@@ -17,6 +13,46 @@ DEFINE_GUID(IID_VSA, 0xD69EBDF7, 0x494B, 0x11D5, 0x8D, 0x2D, 0x00, 0x20, 0x78, 0
 unsigned int devNo = 0;
 volatile long frame;
 volatile BOOL playing = FALSE;
+volatile char threadStatus = 0;
+volatile BOOL threadRun = TRUE;
+
+void MIDIThread(void *non) {
+	if(!threadRun) return;
+	threadStatus = 0;
+	MMRESULT res;
+	HMIDIOUT device;
+	res = midiOutOpen(&device, devNo, 0, 0, CALLBACK_NULL);
+	if(res != MMSYSERR_NOERROR) {
+		threadStatus = -1;
+		return;
+	}
+	long fr;
+	unsigned char time[4];
+	char cnt;
+	while(threadRun) {
+		if(!playing)
+			continue;
+		fr = frame>0?frame:0;
+		time[0] = fr % 30;
+		time[1] = fr / 30 % 60;
+		time[2] = fr / (30*60) % 60;
+		time[3] = fr / (30*60*60)%31;
+		cnt = 0;
+		for(;cnt<8;cnt++){
+			MIDIMsg msg = {0};
+			msg.data[0] = 0xF1;
+			if(cnt != 7)
+				msg.data[1] = cnt<<4 | (0x0F & (time[cnt/2]>>(4*(cnt&1))));
+			else
+				msg.data[1] = cnt<<4 | (1 & time[3]>>4) | 6;
+			midiOutShortMsg(device, msg.word);
+			Sleep(1);
+		}
+	}
+	threadStatus = -1;
+	midiOutClose(device);
+}
+
 int main(void) {
 	textcolor(LIGHTGRAY);
 	textbackground(BLACK);
@@ -32,8 +68,11 @@ int main(void) {
 	STATUS("MIDIOutputChooser", res);
 	res = OleInitialize(NULL);
 	STATUS("OleInitialize", res);
+	CLSID VSACLSID;
+	res = CLSIDFromProgID(L"VSACONSOLE.VSAConsoleCtrl.1", &VSACLSID);
+	STATUS("Get CLSID for VSACONSOLE.VSAConsoleCtrl.1", res);
 	IDispatch *DISP_OBJ;
-	res = CoCreateInstance(&IID_VSA, NULL, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER, &IID_IDispatch, (void **)&DISP_OBJ);
+	res = CoCreateInstance(&VSACLSID, NULL, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER, &IID_IDispatch, (void **)&DISP_OBJ);
 	STATUS("CoCreateInstance of IDispatch", res);
 	IPersistStreamInit *k = {0};
 	res = DISP_OBJ->lpVtbl->QueryInterface(DISP_OBJ, &IID_IPersistStreamInit, (void **)&k);
@@ -74,6 +113,7 @@ int main(void) {
 	long frame_prev;
 	BOOL loop = TRUE;
 	BOOL showingP = FALSE;
+	_beginthread(MIDIThread, 0, NULL);
 	while(loop) {
 		Sleep(50);
 		if(_kbhit())
@@ -88,7 +128,11 @@ int main(void) {
 					GetNothingFromMethod(DISP_OBJ, Stop);
 					break;
 				case 'r':
+					threadRun = FALSE;
 					Reload(DISP_OBJ);
+					while(threadStatus != -1);
+					threadRun = TRUE;
+					_beginthread(MIDIThread, 0, NULL);
 					break;
 					//TODO: Implement MIDI Output change
 				default:
@@ -174,9 +218,12 @@ HRESULT GetVSAPath(PWSTR path) {
 	while(len--) {
 		ExpandEnvironmentStrings(chpaths[len], fPath, MAX_PATH-1);
 #ifdef  DEBUG
-		printf("%.260ls\n", fPath);
+		printf("checking: %.260ls\n", fPath);
 #endif
 		if(PathFileExists(fPath)) {
+#ifdef  DEBUG
+			printf("FOUND");
+#endif
 			len = wcsnlen(fPath, MAX_PATH-1)+1;
 			wcsncpy(path, fPath, MAX_PATH-1);
 			RegSetValueEx(hMykey, L"VSAPATH", 0, REG_SZ, (LPBYTE)fPath, (DWORD)(len)*sizeof(WCHAR));
@@ -184,6 +231,7 @@ HRESULT GetVSAPath(PWSTR path) {
 			return 0;
 		}
 	}
+	printf("Please point to the VSA.EXE file.\n");
 	HRESULT res = OpenDialog(fPath, L"THE SHIT(VSA.EXE)\0VSA.EXE\0");
 	if(res == S_OK) {
 		wcsncpy(path, fPath, MAX_PATH-1);
@@ -198,6 +246,7 @@ HRESULT GetVSAPath(PWSTR path) {
 HRESULT MIDIOutputChooser(void) {
 	printf("\n");
 	unsigned int cnt = midiOutGetNumDevs();
+	threadRun = FALSE;
 	if(!cnt) {
 		printf("No MIDI Output devices detected!!!");
 		_getch();
@@ -279,6 +328,7 @@ HRESULT MIDIOutputChooser(void) {
 	}
 	freeNames(&names, cnt);
 	clrscr();
+	threadRun = TRUE;
 	return S_OK;
 }
 

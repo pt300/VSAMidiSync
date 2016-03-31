@@ -5,6 +5,10 @@
 #ifndef MIDI3_MAIN_H
 #define MIDI3_MAIN_H
 
+#define INITGUID 1 //force define of GUIDs
+#define UNICODE 1
+#define _UNICODE 1
+
 #include <stdio.h>
 #include <windows.h>
 #include <guiddef.h>
@@ -17,7 +21,7 @@
 #include <ocidl.h>
 #include <shlwapi.h>
 #include <winreg.h>
-
+#include <process.h>
 
 #ifdef DEBUG
 #define STATUS(NAME, STAT) printf("%s: ", NAME); if(STAT == S_OK) printf("[SUCCESS]\n"); else{\
@@ -30,6 +34,11 @@ FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_M
 #ifndef DEBUG
 #define STATUS(a, b) if(b != S_OK) {printf("\nError was encountered. Shutting down.\nPress any key..."); _getch(); _setcursortype(_NORMALCURSOR); exit(0);}
 #endif
+
+typedef union {
+	DWORD word;
+	unsigned char data[4];
+} MIDIMsg;
 
 /*
 typedef struct IVSAs IVSA;
