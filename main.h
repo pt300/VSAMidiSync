@@ -10,11 +10,15 @@
 #include <guiddef.h>
 #include <mmsystem.h>
 #include <conio.h>
+#include "conio2.c"
 #include <wchar.h>
 #include <cguid.h>
 #include <objbase.h>
+#include <ocidl.h>
+#include <shlwapi.h>
+#include <winreg.h>
 
-#define VSA_PATH L"C:\\Program Files\\Brookshire Software\\Visual Show Automation Hobbyist\\VSA.EXE"
+
 #ifdef DEBUG
 #define STATUS(NAME, STAT) printf("%s: ", NAME); if(STAT == S_OK) printf("[SUCCESS]\n"); else{\
 							printf("[FAIL] 0x%lX\n", STAT);\
@@ -24,7 +28,7 @@ FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_M
 							exit(1);}
 #endif
 #ifndef DEBUG
-#define STATUS(a, b) if(b != S_OK) {printf("\nError was encountered. Shutting down.\n"); exit(0);}
+#define STATUS(a, b) if(b != S_OK) {printf("\nError was encountered. Shutting down.\nPress any key..."); _getch(); _setcursortype(_NORMALCURSOR); exit(0);}
 #endif
 
 /*
@@ -82,10 +86,14 @@ typedef enum {
 	Hidden
 } WSA_WINODW;
 
+HRESULT GetVSAPath(PWSTR);
+HRESULT MIDIOutputChooser(void);
+void freeNames(char ***, unsigned int);
+void fillNames(char ***, unsigned int);
 HRESULT Reload(IDispatch *);
-HRESULT TogglePlay(IDispatch *, BOOL *);
+HRESULT TogglePlay(IDispatch *);
 HRESULT CallStupidPlayMethodFuckingHell(IDispatch *);
-HRESULT GetLongFromMethod(IDispatch *, VSA_IDs, LONG *);
+HRESULT GetLongFromMethod(IDispatch *, VSA_IDs, volatile LONG *);
 HRESULT GetBoolFromMethod(IDispatch *, VSA_IDs, BOOL *);
 HRESULT GetNothingFromMethod(IDispatch *, VSA_IDs);
 HRESULT SetStringProperty(IDispatch *, VSA_IDs, LPWSTR);
