@@ -35,6 +35,13 @@ FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_M
 #define STATUS(a, b) if(b != S_OK) {printf("\nError was encountered. Shutting down.\nPress any key..."); _getch(); _setcursortype(_NORMALCURSOR); exit(0);}
 #endif
 
+#define HELPSTR "To exit press [q]. Play/pause [spacebar]. Stop [s]. Reload VSA [r].\n" \
+				"Change MIDI output [m]. Open other file [n].\n\n"
+
+#define VSAFILEFILTER L"Pics of horse dicks(*.vsa)\0*.vsa\0"
+#define VSAEXEFILTER L"THE SHIT(VSA.EXE)\0VSA.EXE\0"
+#define VSAEXEREGKEY L"VSAPATH"
+
 typedef union {
 	DWORD word;
 	unsigned char data[4];

@@ -49,11 +49,12 @@ void MIDIThread(void *non) {
 			Sleep(1);
 		}
 	}
-	threadStatus = -1;
 	midiOutClose(device);
+	threadStatus = -1;
 }
 
 int main(void) {
+	BOOL gotMidiDevice = FALSE;
 	textcolor(LIGHTGRAY);
 	textbackground(BLACK);
 	_setcursortype(_NOCURSOR);
@@ -65,7 +66,8 @@ int main(void) {
 		printf("No path to VSA.EXE");
 	STATUS("Path to VSA.EXE", res);
 	res = MIDIOutputChooser();
-	STATUS("MIDIOutputChooser", res);
+	//STATUS("MIDIOutputChooser", res);
+	gotMidiDevice = !res;
 	res = OleInitialize(NULL);
 	STATUS("OleInitialize", res);
 	CLSID VSACLSID;
@@ -82,7 +84,7 @@ int main(void) {
 	res = SetStringProperty(DISP_OBJ, vsaPath, path);
 	STATUS("SetStringProperty for vsaPath", res);
 	printf("Choose .vsa file to play.");
-	res = OpenDialog(path, L"Pics of horse dicks(*.vsa)\0*.vsa\0");
+	res = OpenDialog(path, VSAFILEFILTER);
 	if(res != S_OK) {
 		printf("No file as selected...");
 		DISP_OBJ->lpVtbl->Release(DISP_OBJ);
@@ -94,7 +96,7 @@ int main(void) {
 	STATUS("Path for *.vsa", res);
 	res = SetStringProperty(DISP_OBJ, routinePath, path);
 	STATUS("SetStringProprty for routinePath", res);
-	free(path);
+	//free(path);
 	res = SetShortProperty(DISP_OBJ, showWindow, Minimized);
 	STATUS("SetShortProperty for showWindow", res);
 	BOOL status;
@@ -108,12 +110,18 @@ int main(void) {
 #ifndef DEBUG
 	clrscr();
 #endif
-	printf("Apparently everything works!\n"
-			"To exit press [q]. Play/pause [spacebar]. Stop [s]. Reload VSA [r].\n");
+	//printf("Apparently everything works!\n");
+	printf(HELPSTR);
 	long frame_prev;
 	BOOL loop = TRUE;
 	BOOL showingP = FALSE;
-	_beginthread(MIDIThread, 0, NULL);
+	BOOL redraw = FALSE;
+	BOOL showingE = FALSE;
+	if(gotMidiDevice) {
+		threadStatus = -1;
+		threadRun = TRUE;
+		_beginthread(MIDIThread, 0, NULL);
+	}
 	while(loop) {
 		Sleep(50);
 		if(_kbhit())
@@ -129,28 +137,81 @@ int main(void) {
 					break;
 				case 'r':
 					threadRun = FALSE;
-					Reload(DISP_OBJ);
 					while(threadStatus != -1);
-					threadRun = TRUE;
-					_beginthread(MIDIThread, 0, NULL);
+					Reload(DISP_OBJ);
+					printf(HELPSTR);
+					redraw = TRUE;
+					showingP = FALSE;
+					showingE = FALSE;
+					if(gotMidiDevice) {
+						threadRun = TRUE;
+						_beginthread(MIDIThread, 0, NULL);
+					}
 					break;
-					//TODO: Implement MIDI Output change
+				case 'm':
+					threadRun = FALSE;
+					while(threadStatus != -1);
+					gotMidiDevice = !MIDIOutputChooser();
+					printf(HELPSTR);
+					redraw = TRUE;
+					showingP = FALSE;
+					showingE = FALSE;
+					if(gotMidiDevice) {
+						threadRun = TRUE;
+						_beginthread(MIDIThread, 0, NULL);
+					}
+					break;
+				case 'n':
+					res = OpenDialog(path, VSAFILEFILTER); //TODO: find out why this shit blocks the MIDIThread
+					if(res == S_OK) {
+						threadRun = FALSE;
+						while(threadStatus != -1);
+						if(playing)
+							GetNothingFromMethod(DISP_OBJ, Pause);
+						SetStringProperty(DISP_OBJ, routinePath, path);
+						Reload(DISP_OBJ);
+						printf(HELPSTR);
+						redraw = TRUE;
+						showingP = FALSE;
+						showingE = FALSE;
+						if(gotMidiDevice) {
+							threadRun = TRUE;
+							_beginthread(MIDIThread, 0, NULL);
+						}
+					}
 				default:
 					break;
 			}
 		GetLongFromMethod(DISP_OBJ, GetPlaybackStatus, &frame);
+		if(threadStatus == -1 && !showingE) {
+			int wx = wherex();
+			int wy = wherey();
+			printf("\nConnection to MIDI output lost!");
+			showingE = TRUE;
+			gotoxy(wy, wy);
+		}
+		if(threadStatus != -1 && showingE) {
+			int wx = wherex();
+			int wy = wherey();
+			putchar('\n');
+			clreol();
+			showingE = FALSE;
+			gotoxy(wy, wy);
+		}
 		if(frame == frame_prev) {
 			playing = FALSE;
-			if(!showingP && frame != -1) {
+			if(!showingP && frame != -1 && !redraw) {
 				printf("\b%c", 186);
 				showingP = TRUE;
 			}
-			continue;
+			if(!redraw)
+				continue;
 		}
 		else {
 			playing = TRUE;
 			showingP = FALSE;
 		}
+		redraw = FALSE;
 		frame_prev = frame;
 		if(frame == -2) {
 			printf("An error occurred\n");
@@ -171,7 +232,8 @@ int main(void) {
 	}
 	if(_kbhit())
 		getch();
-	printf("\nShutting down...\n");
+	printf("\n\nShutting down...\n");
+	free(path);
 	res = GetNothingFromMethod(DISP_OBJ, Destroy);
 	STATUS("GetNothingFromMethod Destroy", res);
 	DISP_OBJ->lpVtbl->Release(DISP_OBJ);
@@ -183,10 +245,12 @@ int main(void) {
 	textcolor(RED);
 	putchar(3);
 	textcolor(LIGHTGRAY);
-	printf(" for Laz0r.\nPress any key...", 3);
+	printf(" for Laz0r.\nPress any key...\n", 3);
 	_setcursortype(_NORMALCURSOR);
 	normvideo();
 	_getch();
+	if(!gotMidiDevice && threadStatus != -1)
+		printf("Waiting for thread to exit...");
 }
 
 HRESULT GetVSAPath(PWSTR path) {
@@ -198,7 +262,7 @@ HRESULT GetVSAPath(PWSTR path) {
 	STATUS("CreateKey", ress);
 	if(disposition == REG_OPENED_EXISTING_KEY) {
 		DWORD type = 0;
-		LONG status = RegQueryValueEx(hMykey, L"VSAPATH", NULL, &type, (LPBYTE)fPath, &len);
+		LONG status = RegQueryValueEx(hMykey, VSAEXEREGKEY, NULL, &type, (LPBYTE)fPath, &len);
 		if(status == ERROR_SUCCESS && (len/sizeof(WCHAR)) < MAX_PATH) {
 			fPath[len/sizeof(WCHAR)+1] = '\0';
 			if(PathFileExists(fPath)) {
@@ -226,16 +290,16 @@ HRESULT GetVSAPath(PWSTR path) {
 #endif
 			len = wcsnlen(fPath, MAX_PATH-1)+1;
 			wcsncpy(path, fPath, MAX_PATH-1);
-			RegSetValueEx(hMykey, L"VSAPATH", 0, REG_SZ, (LPBYTE)fPath, (DWORD)(len)*sizeof(WCHAR));
+			RegSetValueEx(hMykey, VSAEXEREGKEY, 0, REG_SZ, (LPBYTE)fPath, (DWORD)(len)*sizeof(WCHAR));
 			RegCloseKey(hMykey);
 			return 0;
 		}
 	}
 	printf("Please point to the VSA.EXE file.\n");
-	HRESULT res = OpenDialog(fPath, L"THE SHIT(VSA.EXE)\0VSA.EXE\0");
+	HRESULT res = OpenDialog(fPath, VSAEXEFILTER);
 	if(res == S_OK) {
 		wcsncpy(path, fPath, MAX_PATH-1);
-		RegSetValueEx(hMykey, L"VSAPATH", 0, REG_SZ, (LPBYTE)fPath, (DWORD)(wcsnlen(fPath, MAX_PATH-1)+1)*sizeof(WCHAR));
+		RegSetValueEx(hMykey, VSAEXEREGKEY, 0, REG_SZ, (LPBYTE)fPath, (DWORD)(wcsnlen(fPath, MAX_PATH-1)+1)*sizeof(WCHAR));
 		RegCloseKey(hMykey);
 		return 0;
 	}
@@ -246,10 +310,10 @@ HRESULT GetVSAPath(PWSTR path) {
 HRESULT MIDIOutputChooser(void) {
 	printf("\n");
 	unsigned int cnt = midiOutGetNumDevs();
-	threadRun = FALSE;
 	if(!cnt) {
 		printf("No MIDI Output devices detected!!!");
 		_getch();
+		clrscr();
 		return 1;
 	}
 	struct text_info term;
@@ -328,7 +392,6 @@ HRESULT MIDIOutputChooser(void) {
 	}
 	freeNames(&names, cnt);
 	clrscr();
-	threadRun = TRUE;
 	return S_OK;
 }
 
@@ -355,15 +418,15 @@ void fillNames(char ***dev, unsigned int cnt) {
 HRESULT Reload(IDispatch *dispatch) {
 	HRESULT res;
 	BOOL status;
+	printf("\n\nRestarting VSA...\n");
 	res = GetNothingFromMethod(dispatch, Destroy);
 	STATUS("GetNothingFromMethod Destroy", res);
 	res = GetBoolFromMethod(dispatch, Create, &status);
 	STATUS("GetBoolFromMethod Create()", res);
+	clrscr();
 #ifdef DEBUG
 	printf("Control is owned by us: %s\n", status?"YES":"NO");
 #endif
-	Sleep(1000);
-	STATUS("Sleep for 1 second", S_OK);
 	return res;
 }
 
