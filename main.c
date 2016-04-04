@@ -75,6 +75,7 @@ int main(void) {
 	STATUS("Get CLSID for VSACONSOLE.VSAConsoleCtrl.1", res);
 	IDispatch *DISP_OBJ;
 	res = CoCreateInstance(&VSACLSID, NULL, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER, &IID_IDispatch, (void **)&DISP_OBJ);
+	printf("If it's failing at this point it usually will mean you forgot to register .ocx control:\nhttps://support.microsoft.com/en-us/kb/146219\n");
 	STATUS("CoCreateInstance of IDispatch", res);
 	IPersistStreamInit *k = {0};
 	res = DISP_OBJ->lpVtbl->QueryInterface(DISP_OBJ, &IID_IPersistStreamInit, (void **)&k);
@@ -122,6 +123,7 @@ int main(void) {
 		threadRun = TRUE;
 		_beginthread(MIDIThread, 0, NULL);
 	}
+	Sleep(3000);
 	while(loop) {
 		Sleep(50);
 		if(_kbhit())
@@ -214,8 +216,9 @@ int main(void) {
 		redraw = FALSE;
 		frame_prev = frame;
 		if(frame == -2) {
-			printf("An error occurred\n");
-			break;
+			printf("Program returned error code -2\r");
+			continue; //APPARENTLY IGNORING ERROR CODE FUCKING SOLVES ALL PROBLEMS OF THIS WORLD!
+			//break;
 		}
 		putchar('\r');
 		clreol();
