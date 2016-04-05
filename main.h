@@ -5,7 +5,6 @@
 #ifndef MIDI3_MAIN_H
 #define MIDI3_MAIN_H
 
-#define INITGUID 1 //force define of GUIDs
 #define UNICODE 1
 #define _UNICODE 1
 

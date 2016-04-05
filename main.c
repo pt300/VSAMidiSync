@@ -3,8 +3,6 @@
 //
 
 #include "main.h"
-DEFINE_GUID(IID_VSA, 0xD69EBDF7, 0x494B, 0x11D5, 0x8D, 0x2D, 0x00, 0x20, 0x78, 0x15, 0x1F, 0x21);
-
 //pause 186
 //stop 254
 //play 16
@@ -51,7 +49,7 @@ void MIDIThread(void *non) {
 //		midiOutPrepareHeader(device, &syncFrame, sizeof(MIDIHDR));
 //		midiOutLongMsg(device, &syncFrame, sizeof(MIDIHDR));
 //		midiOutUnprepareHeader(device, &syncFrame, sizeof(MIDIHDR));
-//	}
+//	} apparently we don't need it
 	char cnt;
 	while(threadRun) {
 		if(!playing)
@@ -274,7 +272,7 @@ int main(void) {
 	textcolor(RED);
 	putchar(3);
 	textcolor(LIGHTGRAY);
-	printf(" for Laz0r.\nPress any key...\n", 3);
+	printf(" for Laz0r.\nPress any key...\n");
 	_setcursortype(_NORMALCURSOR);
 	normvideo();
 	_getch();
@@ -383,7 +381,7 @@ HRESULT MIDIOutputChooser(void) {
 				continue;
 			case 224:
 				;
-				char key = _getch();
+				char key = (char)_getch();
 				if(key == 72) {
 					if(pos) {
 						pos--;
