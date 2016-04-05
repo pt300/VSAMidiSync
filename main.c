@@ -26,8 +26,32 @@ void MIDIThread(void *non) {
 		threadStatus = -1;
 		return;
 	}
+	timeBeginPeriod(8);
 	long fr;
 	unsigned char time[4];
+//	{
+//		fr = frame > 0 ? frame : 0;
+//		time[0] = fr % 30;
+//		time[1] = fr / 30 % 60;
+//		time[2] = fr / (30 * 60) % 60;
+//		time[3] = fr / (30 * 60 * 60) % 31;
+//		MIDIHDR syncFrame = {0};
+//		syncFrame.lpData = malloc(10 * sizeof(CHAR)); //F0 7F cc 01 01 hr mn sc fr F7
+//		syncFrame.lpData[0] = 0xF0;
+//		syncFrame.lpData[0] = 0x7F;
+//		syncFrame.lpData[0] = 0x7F;
+//		syncFrame.lpData[0] = 0x01;
+//		syncFrame.lpData[0] = 0x01;
+//		syncFrame.lpData[0] = time[3];
+//		syncFrame.lpData[0] = time[2];
+//		syncFrame.lpData[0] = time[1];
+//		syncFrame.lpData[0] = time[0];
+//		syncFrame.lpData[0] = 0xF7;
+//		syncFrame.dwBufferLength = 10;
+//		midiOutPrepareHeader(device, &syncFrame, sizeof(MIDIHDR));
+//		midiOutLongMsg(device, &syncFrame, sizeof(MIDIHDR));
+//		midiOutUnprepareHeader(device, &syncFrame, sizeof(MIDIHDR));
+//	}
 	char cnt;
 	while(threadRun) {
 		if(!playing)
@@ -46,9 +70,10 @@ void MIDIThread(void *non) {
 			else
 				msg.data[1] = cnt<<4 | (1 & time[3]>>4) | 6;
 			midiOutShortMsg(device, msg.word);
-			Sleep(1);
+			Sleep(8); //soooooo accurate
 		}
 	}
+	timeEndPeriod(8);
 	midiOutClose(device);
 	threadStatus = -1;
 }
@@ -75,7 +100,8 @@ int main(void) {
 	STATUS("Get CLSID for VSACONSOLE.VSAConsoleCtrl.1", res);
 	IDispatch *DISP_OBJ;
 	res = CoCreateInstance(&VSACLSID, NULL, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER, &IID_IDispatch, (void **)&DISP_OBJ);
-	printf("If it's failing at this point it usually will mean you forgot to register .ocx control:\nhttps://support.microsoft.com/en-us/kb/146219\n");
+	if(res != S_OK)
+		printf("If it's failing at this point it usually will mean you forgot to register .ocx control:\nhttps://support.microsoft.com/en-us/kb/146219\n");
 	STATUS("CoCreateInstance of IDispatch", res);
 	IPersistStreamInit *k = {0};
 	res = DISP_OBJ->lpVtbl->QueryInterface(DISP_OBJ, &IID_IPersistStreamInit, (void **)&k);
