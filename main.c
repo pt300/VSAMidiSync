@@ -13,6 +13,8 @@ volatile long frame;
 volatile BOOL playing = FALSE;
 volatile char threadStatus = 0;
 volatile BOOL threadRun = TRUE;
+volatile char dialogStatus = 0;
+WCHAR dialogPath[MAX_PATH];
 
 void MIDIThread(void *non) {
 	if(!threadRun) return;
@@ -74,6 +76,11 @@ void MIDIThread(void *non) {
 	timeEndPeriod(8);
 	midiOutClose(device);
 	threadStatus = -1;
+}
+
+void AsynchOpenDialog(void *nuthing) {
+	dialogStatus = 1;
+	dialogStatus = (OpenDialog(dialogPath, VSAFILEFILTER) == S_OK) ? 2 : 0;
 }
 
 int main(void) {
@@ -188,26 +195,28 @@ int main(void) {
 					}
 					break;
 				case 'n':
-					res = OpenDialog(path, VSAFILEFILTER); //TODO: find out why this shit blocks the MIDIThread
-					if(res == S_OK) {
-						threadRun = FALSE;
-						while(threadStatus != -1);
-						if(playing)
-							GetNothingFromMethod(DISP_OBJ, Pause);
-						SetStringProperty(DISP_OBJ, routinePath, path);
-						Reload(DISP_OBJ);
-						printf(HELPSTR);
-						redraw = TRUE;
-						showingP = FALSE;
-						showingE = FALSE;
-						if(gotMidiDevice) {
-							threadRun = TRUE;
-							_beginthread(MIDIThread, 0, NULL);
-						}
-					}
+					if(!dialogStatus)
+						_beginthread(AsynchOpenDialog, 0, NULL); //it doesn't lol
 				default:
 					break;
 			}
+		if(dialogStatus == 2) {
+			dialogStatus = 0;
+			threadRun = FALSE;
+			while(threadStatus != -1);
+			if(playing)
+				GetNothingFromMethod(DISP_OBJ, Pause);
+			SetStringProperty(DISP_OBJ, routinePath, dialogPath);
+			Reload(DISP_OBJ);
+			printf(HELPSTR);
+			redraw = TRUE;
+			showingP = FALSE;
+			showingE = FALSE;
+			if(gotMidiDevice) {
+				threadRun = TRUE;
+				_beginthread(MIDIThread, 0, NULL);
+			}
+		}
 		GetLongFromMethod(DISP_OBJ, GetPlaybackStatus, &frame);
 		if(threadStatus == -1 && !showingE) {
 			int wx = wherex();
