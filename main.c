@@ -108,7 +108,7 @@ int main(void) {
 	if(res != S_OK)
 		printf("If it's failing at this point it usually will mean you forgot to register .ocx control:\nhttps://support.microsoft.com/en-us/kb/146219\n");
 	STATUS("CoCreateInstance of IDispatch", res);
-	IPersistStreamInit *k = {0};
+	IPersistStreamInit *k;
 	res = DISP_OBJ->lpVtbl->QueryInterface(DISP_OBJ, &IID_IPersistStreamInit, (void **)&k);
 	STATUS("QueryInterface for IPersistStreamInit", res);
 	res = k->lpVtbl->InitNew(k);
@@ -541,7 +541,8 @@ HRESULT SetShortProperty(IDispatch *dispatch, VSA_IDs dispid, SHORT valueSet) {
 
 HRESULT PutValue(IDispatch *dispatch, VSA_IDs dispid, VARIANT *varValue) {
 	HRESULT v;
-	DISPPARAMS dp = {0};
+	DISPPARAMS dp;
+	ZeroMemory(&dp, sizeof(dp));
 	dp.cArgs = 1;
 	dp.rgvarg = varValue;
 	dp.cNamedArgs = 1;
@@ -554,7 +555,8 @@ HRESULT PutValue(IDispatch *dispatch, VSA_IDs dispid, VARIANT *varValue) {
 }
 
 HRESULT CallMethod(IDispatch *dispatch, VSA_IDs dispid, VARIANT *varValue) {
-	DISPPARAMS dp = {0};
+	DISPPARAMS dp;
+	ZeroMemory(&dp, sizeof(dp));
 	return dispatch->lpVtbl->Invoke(dispatch, dispid, &IID_NULL, LOCALE_SYSTEM_DEFAULT, DISPATCH_METHOD, &dp, varValue, NULL, NULL);
 }
 
