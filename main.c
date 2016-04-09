@@ -223,7 +223,7 @@ int main(void) {
 			int wy = wherey();
 			printf("\nConnection to MIDI output lost!");
 			showingE = TRUE;
-			gotoxy(wy, wy);
+			gotoxy(wx, wy);
 		}
 		if(threadStatus != -1 && showingE) {
 			int wx = wherex();
@@ -231,7 +231,7 @@ int main(void) {
 			putchar('\n');
 			clreol();
 			showingE = FALSE;
-			gotoxy(wy, wy);
+			gotoxy(wx, wy);
 		}
 		if(frame == frame_prev) {
 			playing = FALSE;
