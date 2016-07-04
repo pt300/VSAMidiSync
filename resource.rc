@@ -1,0 +1,104 @@
+#include <windows.h>
+#include <commctrl.h>
+#include "resource.h"
+
+IDI_APPICON ICON "Application.ico"
+
+IDI_PLAY ICON "play.ico"
+IDI_PAUSE ICON "pause.ico"
+IDI_STOP ICON "stop.ico"
+
+//Main window menu//
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDR_MAINMENU MENU
+{
+    POPUP "&File"
+    {
+        MENUITEM "&Open VSA file", ID_FILE_OPEN
+        MENUITEM "&Reload VSA", ID_FILE_RELOAD
+        MENUITEM "Choose &MIDI output", ID_FILE_MIDI
+        MENUITEM "E&xit", ID_FILE_EXIT
+    }
+    POPUP "&Help"
+    {
+        MENUITEM "&About", ID_HELP_ABOUT
+    }
+}
+
+
+
+// Application manifest.
+LANGUAGE 0, SUBLANG_NEUTRAL
+1                  RT_MANIFEST    "manifest.xml"
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+1 VERSIONINFO
+    FILEVERSION     1,0,0,0
+    PRODUCTVERSION  0,0,0,0
+    FILEOS          VOS_NT
+    FILETYPE        VFT_APP
+    FILESUBTYPE     VFT2_UNKNOWN
+    FILEFLAGSMASK   0
+    FILEFLAGS       0
+{
+    BLOCK "StringFileInfo"
+    {
+        BLOCK "08096FAF"
+        {
+            VALUE "Comments", "For Pieter <3"
+            VALUE "CompanyName", ""
+            VALUE "FileDescription", "Utility to sync time in VSA with MIDI bus."
+            VALUE "FileVersion", ""
+            VALUE "InternalName", ""
+            VALUE "LegalCopyright", "CopyLeft P4t"
+            VALUE "LegalTrademarks", ""
+            VALUE "OriginalFilename", ""
+            VALUE "PrivateBuild", ""
+            VALUE "ProductName", ""
+            VALUE "ProductVersion", ""
+            VALUE "SpecialBuild", ""
+        }
+    }
+    BLOCK "VarFileInfo"
+    {
+        VALUE "Translation", 0x0809, 0x6FAF
+    }
+}
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_ABOUTDIALOG DIALOGEX 0, 0, 150, 70
+STYLE DS_3DLOOK | DS_CENTER | DS_MODALFRAME | DS_SHELLFONT | WS_CAPTION | WS_VISIBLE | WS_POPUP | WS_SYSMENU
+CAPTION "About"
+FONT 8, "Ms Shell Dlg"
+{
+    PUSHBUTTON      "Ok", IDOK, 90, 45, 50, 15, 0, WS_EX_LEFT
+    LTEXT           "VSAMidiSync\nCopyLeft P4t\nFor Pieter :3", 0, 35, 10, 70, 30, SS_LEFT, WS_EX_LEFT
+    ICON            IDI_APPICON, IDC_STATIC, 7, 7, 20, 20
+}
+
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDD_MIDICHOOSER DIALOG 0, 0, 200, 135
+STYLE DS_3DLOOK | DS_CENTER | DS_MODALFRAME | DS_SHELLFONT | WS_CAPTION | WS_VISIBLE | WS_POPUP | WS_SYSMENU
+CAPTION "MIDI Output"
+FONT 8, "Ms Shell Dlg"
+{
+    CONTROL         "", ID_DEVICELIST, WC_LISTBOX, WS_BORDER , 7, 10, 128, 130, WS_EX_LEFT
+    PUSHBUTTON      "Select", IDOK, 143, 12, 50, 15, 0, WS_EX_LEFT
+    PUSHBUTTON      "Set Default", ID_MIDI_DEF, 143, 32, 50, 15, 0, WS_EX_LEFT
+    PUSHBUTTON      "Cancel", IDCANCEL, 143, 52, 50, 15, 0, WS_EX_LEFT
+    PUSHBUTTON      "Refresh", ID_REFRESH, 143, 107, 50, 15, 0, WS_EX_LEFT
+}
+
+
+// Our accelerators.//
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDR_ACCELERATOR ACCELERATORS
+{
+    "A",            ID_HELP_ABOUT, VIRTKEY, ALT
+    "O",            ID_FILE_OPEN, VIRTKEY, CONTROL
+    "R",            ID_FILE_RELOAD, VIRTKEY
+    "M",            ID_FILE_MIDI, VIRTKEY
+    "S",            ID_STOP, VIRTKEY
+    "Q",            ID_QUIT, VIRTKEY, CONTROL
+    VK_SPACE,       ID_TOGGLE, VIRTKEY, NOINVERT
+}
