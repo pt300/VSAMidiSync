@@ -1,6 +1,6 @@
-//
-// Created by patryk on 23.06.16.
-//
+/*
+ * Created by patryk on 23.06.16.
+ */
 
 #include "AXCtrl.h"
 
@@ -16,10 +16,10 @@ void AX_deinit(void) {
 	OleUninitialize();
 }
 
-HRESULT AX_getControl(AXObj *obj, LPCOLESTR name) {
+HRESULT AX_getControl(AX_object *obj, LPCOLESTR name) {
 	HRESULT res;
 	CLSID id;
-	//TODO: error specific to init step
+	/*TODO: error specific to init step*/
 	if((res = CLSIDFromProgID(name, &id)) ||
 	   (res = CoCreateInstance(&id, NULL, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER, &IID_IDispatch, (void **) &obj->dispatch)) ||
 	   (res = obj->dispatch->lpVtbl->QueryInterface(obj->dispatch, &IID_IPersistStreamInit, (void **) &obj->stream)) ||
@@ -30,7 +30,7 @@ HRESULT AX_getControl(AXObj *obj, LPCOLESTR name) {
 	return S_OK;
 }
 
-HRESULT AX_destroyControl(AXObj *obj) {
+HRESULT AX_destroyControl(AX_object *obj) {
 	HRESULT res;
 
 	if((res = obj->stream->lpVtbl->Release(obj->stream)) ||
@@ -41,8 +41,8 @@ HRESULT AX_destroyControl(AXObj *obj) {
 	return S_OK;
 }
 
-//TODO: enum with return codes
-HRESULT AX_callMethod(AXObj *obj, OLECHAR *name, enum VARENUM ret_type, void *ret_val, ...) {
+/*TODO: enum with return codes*/
+HRESULT AX_callMethod(AX_object *obj, OLECHAR *name, enum VARENUM ret_type, void *ret_val, ...) {
 	va_list args;
 	enum VARENUM type;
 	VARIANT *var, tmp, ret;
@@ -187,7 +187,7 @@ HRESULT AX_callMethod(AXObj *obj, OLECHAR *name, enum VARENUM ret_type, void *re
 	return S_OK;
 }
 
-HRESULT AX_setValue(AXObj *obj, OLECHAR *name, enum VARENUM type, void *data) {
+HRESULT AX_setValue(AX_object *obj, OLECHAR *name, enum VARENUM type, void *data) {
 	VARIANT var;
 	DISPPARAMS params;
 	DISPID id, disp;

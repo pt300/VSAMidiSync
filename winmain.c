@@ -1,167 +1,47 @@
 #include <windows.h>
 #include <commctrl.h>
-#include "resource.h"
-#include "callbacks.h"
 #include "AXCtrl.h"
-#include "Util.h"
+#include "subtracks.h"
+#include "callbacks.h"
+#include "resource.h"
+#include "util.h"
 #include "MIDI.h"
+#include "threads.h"
 
 #define ICON_SIZE 16
 
-//TODO: reformat names a bit :/
+typedef struct {
+	HWND window, group, time, play, pause, stop, statusBar, list, expand;
+} main_window;
 
-struct main_window {
-	HWND window, group, time, play, pause, stop, status_bar;
-};
+int ConstructMainWindow(main_window *obj, HINSTANCE inst, int cmdShow);
 
-struct thread_data {
-	void *data;
-	volatile BOOL shouldRun;
-	volatile BOOL isRunning;
-};
-
-struct time_thread_data {
-	AXObj *ctrl;
-	HWND time_text, window;
-	volatile long frame;
-	volatile BOOL playing;
-};
-
-struct midi_thread_data {
-	volatile long *frame;
-	volatile BOOL *playing;
-	HWND status;
-	UINT device;
-};
-
-typedef union {
-	DWORD word;
-	UCHAR data[4];
-} MIDIMsg;
-
-int constructMainWindow(struct main_window *obj, HINSTANCE inst, int cmd_show);
-
-DWORD WINAPI timeThread(LPVOID data) {
-	struct thread_data *thread = data;
-	struct time_thread_data *vars = thread->data;
-	LONG time;
-	long cf, sec, min, hour;
-	WCHAR text[12];
-	RECT rect;
-	BOOL state = FALSE;
-
-	thread->isRunning = TRUE;
-
-	timeBeginPeriod(33);
-
-
-	GetClientRect(vars->time_text, &rect);
-	InvalidateRect(vars->time_text, &rect, TRUE);
-	MapWindowPoints(vars->time_text, vars->window, (POINT *) &rect, 2);
-	while(thread->shouldRun) {
-		AX_callMethod(vars->ctrl, TEXT("GetPlaybackStatus"), VT_I4, &time, NULL);
-		if(time <= 0) {
-			time = 0;
-		}
-
-		if(time == vars->frame) {
-			if(state && vars->playing) {
-				vars->playing = FALSE;
-			}
-			else {
-				state = TRUE;
-			}
-		}
-		else {
-			state = FALSE;
-			vars->frame = time;
-			vars->playing = TRUE;
-
-			cf = time % 30;
-			sec = time / 30 % 60;
-			min = time / (30 * 60) % 60;
-			hour = time / (30 * 60 * 60);
-			wsprintf(text, L"%.2li:%.2li:%.2li.%.2li", hour, min, sec, cf);
-
-			SetWindowText(vars->time_text, text);
-			RedrawWindow(vars->window, &rect, NULL, RDW_ERASE | RDW_INVALIDATE);
-		}
-
-		Sleep(33);
-	}
-
-	timeEndPeriod(33);
-
-	thread->isRunning = FALSE;
-
-	return 0;
-}
-
-DWORD WINAPI midiThread(LPVOID data) {
-	struct thread_data *thread = data;
-	struct midi_thread_data *vars = thread->data;
-	MMRESULT res;
-	HMIDIOUT device;
-	MIDIMsg msg;
-	UCHAR time[4], cnt;
-
-	res = midiOutOpen(&device, vars->device, 0, 0, CALLBACK_NULL);
-	if(res != MMSYSERR_NOERROR) {
-		return 0;
-	}
-
-	thread->isRunning = TRUE;
-
-	SendMessage(vars->status, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Connected"));	//creative
-
-	timeBeginPeriod(33);
-	//TODO: move a bit to MIDI.c
-	//TODO: think about preserving calculated time values. We use them in 2 places after all.
-	while(thread->shouldRun) {
-		Sleep(33);
-		if(!*vars->playing)
-			continue;
-
-		time[0] = (UCHAR) (*vars->frame % 30);
-		time[1] = (UCHAR) (*vars->frame / 30 % 60);
-		time[2] = (UCHAR) (*vars->frame / (30 * 60) % 60);
-		time[3] = (UCHAR) (*vars->frame / (30 * 60 * 60) % 31);
-
-		for(cnt = 0; cnt < 8; cnt++) {
-			msg.data[0] = 0xF1;
-			if(cnt != 7)
-				msg.data[1] = (UCHAR) (cnt << 4 | (0x0F & (time[cnt / 2] >> (4 * (cnt & 1)))));
-			else
-				msg.data[1] = (UCHAR) (cnt << 4 | (1 & time[3] >> 4) | 6);
-			midiOutShortMsg(device, msg.word);
-		}
-	}
-
-	timeEndPeriod(33);
-	midiOutClose(device);
-
-	thread->isRunning = FALSE;
-
-	SendMessage(vars->status, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Disconnected"));	//creative
-
-	return 0;
-}
+static int scrollbar_width;
 
 int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_show) {
 	HACCEL accel;
 	MSG msg;
-	struct main_window win;
-	struct thread_data time_thread, midi_thread;
-	struct time_thread_data time_data;
-	struct midi_thread_data midi_data;
-	WCHAR vsa_path[MAX_PATH], file_path[MAX_PATH], midi_name[32];
+	HMENU menu;
+	main_window win;
+	thread_data time_thread, midi_thread, loop_thread;
+	time_thread_data time_data;
+	midi_thread_data midi_data;
+	loop_thread_data loop_data;
+	WCHAR vsa_path[MAX_PATH], file_path[MAX_PATH], midi_name[32], txt_buf[51];
+	LONG time, time2;
+	INT position;
 	INT32 midi_id;
-	AXObj ctrl;
-	SHORT window = 1;    //0 - Normal, 1 - Minimized, 2 - Hidden(?)
-	SHORT playMode = 6;
-	BOOL preload = FALSE;
+	AX_object ctrl;
+	subtracks_list list;
+	SHORT window = 1;
 	/*
-	 * Type of Execution       	Value of playMode
+	 * 0 - Normal
+	 * 1 - Minimized
+	 * 2 - Hidden(?)
+	 */
+	SHORT play_mode = 6;
+	/*
+	 * Type of Execution       	Value of play_mode
 	 * Play all                          1
 	 * Play from first marker            2
 	 * Play to second marker             3
@@ -169,6 +49,11 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 	 * Play from first to second marker  5
 	 * Resume play                       6
 	 */
+	/*
+	 * TODO: ENUM it
+	 */
+
+	scrollbar_width = GetSystemMetrics(SM_CXVSCROLL);
 
 	AX_init();
 
@@ -186,29 +71,41 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 		return 1;
 	}
 
+	file_path[0] = '\0';
+
 	AX_setValue(&ctrl, TEXT("vsaPath"), VT_BSTR, vsa_path);
-//	AX_setValue(&ctrl, TEXT("routinePath"), VT_BSTR, TEXT("C:\\Documents and Settings\\Yo_ZiOm\\Pulpit\\supernatural.vsa"));
 	AX_setValue(&ctrl, TEXT("showWindow"), VT_I2, &window);
 
-//	AX_callMethod(&ctrl, TEXT("Create"), VT_NULL, NULL, NULL);
-
-	if(constructMainWindow(&win, inst, cmd_show)) {    //It will display own error dialog
+	if(ConstructMainWindow(&win, inst, cmd_show)) {
 		AX_destroyControl(&ctrl);
 		AX_deinit();
 		return 1;
 	}
 
-	//start time thread
+	/*
+	 * Prepare data for threads and start time thread
+	 */
 	time_thread.isRunning = FALSE;
 	time_thread.shouldRun = TRUE;
 	time_thread.data = &time_data;
 	time_data.ctrl = &ctrl;
 	time_data.playing = FALSE;
 	time_data.frame = 0;
-	time_data.time_text = win.time;
+	time_data.timeText = win.time;
 	time_data.window = win.window;
 
-	CreateThread(NULL, 0, timeThread, &time_thread, 0, NULL);
+	CreateThread(NULL, 0, TimeThread, &time_thread, 0, NULL);
+
+	loop_thread.isRunning = FALSE;
+	loop_thread.shouldRun = TRUE;
+	loop_thread.data = &loop_data;
+	loop_data.ctrl = &ctrl;
+	loop_data.stop = MIDI_TOP;
+	loop_data.start = MIDI_BOTTOM;
+	loop_data.loop = FALSE;
+	loop_data.frame = &time_data.frame;
+
+	CreateThread(NULL, 0, LoopThread, &loop_thread, 0, NULL);
 
 	midi_thread.isRunning = FALSE;
 	midi_thread.shouldRun = TRUE;
@@ -216,20 +113,26 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 	midi_data.playing = &time_data.playing;
 	midi_data.frame = &time_data.frame;
 	midi_data.device = 0;
-	midi_data.status = win.status_bar;
+	midi_data.status = win.statusBar;
 
 	if(!GetMIDIName(midi_name)) {
 		if((midi_id = MIDI_getDeviceByName(midi_name)) > -1) {
 			midi_data.device = (UINT) midi_id;
 			midi_thread.shouldRun = TRUE;
-			CreateThread(NULL, 0, midiThread, &midi_thread, 0, NULL);
+			CreateThread(NULL, 0, MidiThread, &midi_thread, 0, NULL);
 		}
 	}
 
-	//input loop
+	menu = GetMenu(win.window);
+
+	InitSubtracksList(&list);
+
+	/*
+	 * Input loop
+	 */
 	accel = LoadAccelerators(inst, MAKEINTRESOURCE(IDR_ACCELERATOR));
 
-	while(GetMessage(&msg, NULL, 0, 0) > 0) {    //return 0 on WM_QUIT and -1 on error
+	while(GetMessage(&msg, NULL, 0, 0) > 0) {
 		if(!TranslateAccelerator(msg.hwnd, accel, &msg)) {
 			switch(msg.message) {
 				case CANCER:
@@ -237,16 +140,74 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 					while(midi_thread.isRunning);
 					midi_data.device = (UINT) msg.lParam;
 					midi_thread.shouldRun = TRUE;
-					CreateThread(NULL, 0, midiThread, &midi_thread, 0, NULL);
+					CreateThread(NULL, 0, MidiThread, &midi_thread, 0, NULL);
 					break;
 				case DEF_CANCER:
 					SetMIDIName((LPWSTR) msg.lParam);
 					free((LPWSTR) msg.lParam);
 					break;
+				case ADD_STRACK:
+					if(!AddSubtrack(&list, ((subtrack *) msg.lParam)->start, ((subtrack *) msg.lParam)->stop,
+									((subtrack *) msg.lParam)->name)) {
+						MessageBox(win.window, TEXT("127 subtracks is the limit."),
+								   TEXT("Add subtrack"), MB_ICONERROR | MB_OK);
+						break;
+					}
+					FillList(win.list, &list);
+					MakeChanges();
+					free((subtrack *) msg.lParam);
+					break;
+				case SWAP_STRACKS:
+					if(SwapSubtracks(&list, (UCHAR) msg.lParam, (UCHAR) msg.wParam)) {
+						MakeChanges();
+					}
+				case WM_NOTIFY:
+					switch(LOWORD(msg.wParam)) {
+						case ID_TRACKS:
+							switch(((LPNMHDR) msg.lParam)->code) {
+								case LVN_ITEMACTIVATE:
+									if(((LPNMITEMACTIVATE) msg.lParam)->iItem >= 0) {
+										/*
+										 * Apparently that struct gets overwritten when we send a message to ListView.
+										 * Figuring that out took me like a day.
+										 * WinApi is full of wonders.
+										 * Also we do it 2 times because we love WinApi and VSA ActiveX control thingy
+										 */
+										position = ((LPNMITEMACTIVATE) msg.lParam)->iItem;
+
+										ListView_GetItemText(win.list, position, START, txt_buf, 51);
+										time = LongFromString(txt_buf);
+										loop_data.start = time;
+
+										ListView_GetItemText(win.list, position, STOP, txt_buf, 51);
+										time2 = LongFromString(txt_buf);
+										loop_data.stop = time2;
+
+										SetVSARange(&ctrl, time, time2);
+
+										ListView_GetItemText(win.list, position, NAME, txt_buf, 51);
+										SendMessage(win.statusBar, SB_SETTEXT, 1, (LPARAM) txt_buf);
+										if(time_data.playing) {
+											AX_callMethod(&ctrl, TEXT("Stop"), VT_NULL, NULL, NULL);
+											AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE,
+														  NULL);
+										}
+									}
+									break;
+								default:
+									break;
+							}
+							break;
+						default:
+							break;
+					}
+					break;
 				case WM_COMMAND:
-					switch((~(1<<16) & msg.wParam)) { //I have no idea why
+					switch(LOWORD(msg.wParam)) {
+						case ID_FILE_EXIT:
 						case ID_QUIT:
-							PostQuitMessage(0);
+							PostMessage(win.window, WM_CLOSE, 0, 0);
+							break;
 						case ID_FILE_MIDI:
 							DialogBox(inst, MAKEINTRESOURCE(IDD_MIDICHOOSER), win.window, &MIDIChooserProc);
 							break;
@@ -255,9 +216,59 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 								break;
 							}
 							AX_setValue(&ctrl, TEXT("routinePath"), VT_BSTR, file_path);
+							if(VSBExists(file_path) &&
+							   LoadVSBFile(&list, file_path)) {
+								FillList(win.list, &list);
+							}
+							AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, play_mode, VT_BOOL, TRUE, NULL);
 						case ID_FILE_RELOAD:
 							AX_callMethod(&ctrl, TEXT("Destroy"), VT_NULL, NULL, NULL);
 							AX_callMethod(&ctrl, TEXT("Create"), VT_NULL, NULL, NULL);
+							break;
+						case ID_FILE_OPEN_T:
+							if(OpenDialog(msg.hwnd, file_path, VSBFILTER)) {
+								break;
+							}
+							if(VSBExists(file_path) &&
+							   LoadVSBFile(&list, file_path)) {
+								FillList(win.list, &list);
+							}
+							break;
+						case ID_FILE_SAVE_T:
+							if(list.length < 1) {
+								MessageBox(win.window, TEXT("Nothing to save."),
+										   TEXT("Welp"), MB_OK | MB_ICONINFORMATION);
+								break;
+							}
+							if(lstrlen(file_path) != 0) { //else let it slide into next case
+								if(SaveVSBFile(&list, file_path) == FALSE) {
+									MessageBox(win.window, TEXT("Failed saving subtracks."),
+											   TEXT("Save error"), MB_OK);
+									break;
+								}
+								AintNoChanges();
+								if(msg.lParam != 0) { //request to shut down
+									PostMessage(win.window, WM_CLOSE, 0, 0);
+								}
+								break;
+							}
+						case ID_FILE_SAVE_TA:
+							if(list.length < 1) {
+								MessageBox(win.window, TEXT("Nothing to save."),
+										   TEXT("Welp"), MB_OK | MB_ICONINFORMATION);
+								break;
+							}
+							if(SaveDialog(win.window, file_path, VSBFILTER)) {
+								if(!SaveVSBFile(&list, file_path)) {
+									MessageBox(win.window, TEXT("Failed saving subtracks."),
+											   TEXT("Save error"), MB_OK | MB_ICONERROR);
+									break;
+								}
+								if(msg.lParam != 0) {
+									PostMessage(win.window, WM_CLOSE, 0, 0);
+								}
+								AintNoChanges();
+							}
 							break;
 						case ID_STOP:
 							AX_callMethod(&ctrl, TEXT("Stop"), VT_NULL, NULL, NULL);
@@ -265,14 +276,63 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 						case ID_PAUSE:
 							AX_callMethod(&ctrl, TEXT("Pause"), VT_NULL, NULL, NULL);
 							break;
-						case ID_PLAY:
-							AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, playMode, VT_BOOL, preload, NULL);
 						case ID_TOGGLE:
 							if(time_data.playing) {
 								AX_callMethod(&ctrl, TEXT("Pause"), VT_NULL, NULL, NULL);
+								break;
+							}
+						case ID_PLAY:
+							if(time_data.frame >= loop_data.start && time_data.frame < loop_data.stop) {
+								AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 6, VT_BOOL, FALSE, NULL);
 							}
 							else {
-								AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, playMode, VT_BOOL, preload, NULL);
+								AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE, NULL);
+							}
+							break;
+						case ID_EDIT_ADD:
+							DialogBox(inst, MAKEINTRESOURCE(IDD_ADDSUBTRACK), win.window, &AddSubtrackProc);
+							break;
+						case ID_EDIT_REMOVE:
+							position = ListView_GetNextItem(win.list, -1, LVNI_FOCUSED);
+							if(position <= 0) {
+								MessageBox(win.window, TEXT("This subtrack cannot be removed."),
+										   TEXT("Remove subtrack"), MB_ICONERROR | MB_OK);
+								break;
+							}
+							RemoveSubtrack(&list, (UCHAR) --position);
+							FillList(win.list, &list);
+							if(list.length < 1) {
+								AintNoChanges();
+							}
+							else {
+								MakeChanges();
+							}
+							break;
+						case ID_EDIT_REMALL:
+							DestroySubtracksList(&list);
+							InitSubtracksList(&list);
+							FillList(win.list, &list);
+							break;
+						case ID_EXPAND: //hehe
+							if(GetMenuState(menu, ID_EXPAND, MF_BYCOMMAND) & MF_CHECKED) {
+								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_UNCHECKED);
+								SetWindowPos(win.window, NULL, 0, 0, 265, 165,
+											 SWP_NOMOVE | SWP_NOREPOSITION | SWP_NOZORDER);
+							}
+							else {
+								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_CHECKED);
+								SetWindowPos(win.window, NULL, 0, 0, 265 + 250 + scrollbar_width, 165,
+											 SWP_NOMOVE | SWP_NOREPOSITION | SWP_NOZORDER);
+							}
+							break;
+						case ID_LOOP:
+							if(GetMenuState(menu, ID_LOOP, MF_BYCOMMAND) & MF_CHECKED) {
+								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_UNCHECKED);
+								loop_data.loop = FALSE;
+							}
+							else {
+								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_CHECKED);
+								loop_data.loop = TRUE;
 							}
 							break;
 						default:
@@ -289,9 +349,12 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 		}
 	}
 
+	DestroySubtracksList(&list);
+
 	time_thread.shouldRun = FALSE;
 	midi_thread.shouldRun = FALSE;
-	while(time_thread.isRunning || midi_thread.isRunning);
+	loop_thread.shouldRun = FALSE;
+	while(time_thread.isRunning || midi_thread.isRunning || loop_thread.isRunning);
 
 	AX_callMethod(&ctrl, TEXT("Destroy"), VT_NULL, NULL, NULL);
 
@@ -301,11 +364,13 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 	return (int) msg.wParam;
 }
 
-int constructMainWindow(struct main_window *obj, HINSTANCE inst, int cmd_show) {
+int ConstructMainWindow(main_window *obj, HINSTANCE inst, int cmdShow) {
 	WNDCLASSEX wc;
-	LPCTSTR window_class = TEXT("VSAMidiSync");
-	HWND window, group, time, play, pause, stop, status_bar;
+	LPCTSTR windowClass = TEXT("VSAMidiSync");
+	HWND window, group, time, play, pause, stop, status_bar, list, lhead;
 	HFONT leFont;
+	LVCOLUMN col;
+	INT widths[] = {130, -1};
 
 	InitCommonControls();
 
@@ -320,7 +385,7 @@ int constructMainWindow(struct main_window *obj, HINSTANCE inst, int cmd_show) {
 	wc.hCursor = (HCURSOR) LoadImage(NULL, IDC_ARROW, IMAGE_CURSOR, 0, 0, LR_SHARED);
 	wc.hbrBackground = (HBRUSH) (COLOR_3DFACE + 1);
 	wc.lpszMenuName = MAKEINTRESOURCE(IDR_MAINMENU);
-	wc.lpszClassName = window_class;
+	wc.lpszClassName = windowClass;
 	wc.hIconSm = (HICON) LoadImage(inst, MAKEINTRESOURCE(IDI_APPICON), IMAGE_ICON,
 								   GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
 								   LR_DEFAULTCOLOR | LR_SHARED);
@@ -330,61 +395,112 @@ int constructMainWindow(struct main_window *obj, HINSTANCE inst, int cmd_show) {
 		return 1;
 	}
 
-	window = CreateWindowEx(0, window_class, window_class, WS_POPUPWINDOW | WS_CAPTION | WS_MINIMIZEBOX,
-							CW_USEDEFAULT, CW_USEDEFAULT, 265, 165, NULL, NULL, inst, NULL);
+	window = CreateWindow(windowClass, windowClass, WS_POPUPWINDOW | WS_CAPTION | WS_MINIMIZEBOX,
+						  CW_USEDEFAULT, CW_USEDEFAULT, 265, 165, NULL, NULL, inst, NULL);
 
 	if(!window) {
 		MessageBox(NULL, TEXT("Error creating main window."), TEXT("Error"), MB_ICONERROR | MB_OK);
 		return 1;
 	}
 
-	//Build the window's controls
+	/*
+	 * Build the window's controls
+	 */
 
 	leFont = CreateFont(-36, 0, 0, 0, FW_REGULAR, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
 						CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, FF_DONTCARE, TEXT("Arial"));
 
-	group = CreateWindowEx(0, WC_BUTTON, TEXT(""), WS_VISIBLE | WS_CHILD | BS_GROUPBOX | WS_EX_TRANSPARENT,
-						   30, 0, 200, 45, window, NULL, inst, 0);
+	group = CreateWindow(WC_BUTTON, TEXT(""), WS_VISIBLE | WS_CHILD | BS_GROUPBOX | WS_EX_TRANSPARENT,
+						 30, 0, 200, 45, window, NULL, inst, 0);
 
-	time = CreateWindowEx(0, WC_STATIC, TEXT("00:00:00.00"), WS_VISIBLE | WS_CHILD | WS_GROUP | SS_CENTER | WS_EX_TRANSPARENT,
-						  35, 6, 190, 40, window, (HMENU) 0, inst, 0);
+	time = CreateWindow(WC_STATIC, TEXT("00:00:00.00"),
+						WS_VISIBLE | WS_CHILD | WS_GROUP | SS_CENTER | WS_EX_TRANSPARENT,
+						35, 6, 190, 40, window, (HMENU) 0, inst, 0);
 	SendMessage(time, WM_SETFONT, (WPARAM) leFont, FALSE);
 
-	play = CreateWindowEx(0, WC_BUTTON, TEXT("Play"), WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_ICON,
-						  75, 55, 30, 30, window, (HMENU) ID_PLAY, inst, 0);
+	play = CreateWindow(WC_BUTTON, TEXT("Play"), WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_ICON,
+						75, 55, 30, 30, window, (HMENU) ID_PLAY, inst, 0);
 	SendMessage(play, BM_SETIMAGE, IMAGE_ICON,
 				(LPARAM) LoadImage(inst, MAKEINTRESOURCE(IDI_PLAY), IMAGE_ICON, ICON_SIZE, ICON_SIZE,
 								   LR_DEFAULTCOLOR));
 
-	pause = CreateWindowEx(0, WC_BUTTON, TEXT("Pause"), WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_ICON,
-						   115, 55, 30, 30, window, (HMENU) ID_PAUSE, inst, 0);
+	pause = CreateWindow(WC_BUTTON, TEXT("Pause"), WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_ICON,
+						 115, 55, 30, 30, window, (HMENU) ID_PAUSE, inst, 0);
 	SendMessage(pause, BM_SETIMAGE, IMAGE_ICON,
 				(LPARAM) LoadImage(inst, MAKEINTRESOURCE(IDI_PAUSE), IMAGE_ICON, ICON_SIZE, ICON_SIZE,
 								   LR_DEFAULTCOLOR));
 
-	stop = CreateWindowEx(0, WC_BUTTON, TEXT("Stop"), WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_ICON,
-						  155, 55, 30, 30, window, (HMENU) ID_STOP, inst, 0);
+	stop = CreateWindow(WC_BUTTON, TEXT("Stop"), WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_ICON,
+						155, 55, 30, 30, window, (HMENU) ID_STOP, inst, 0);
 	SendMessage(stop, BM_SETIMAGE, IMAGE_ICON,
 				(LPARAM) LoadImage(inst, MAKEINTRESOURCE(IDI_STOP), IMAGE_ICON, ICON_SIZE, ICON_SIZE,
 								   LR_DEFAULTCOLOR));
 
-	status_bar = CreateWindowEx(0, STATUSCLASSNAME, NULL, WS_CHILD | WS_VISIBLE,
-								0, 0, 0, 0, window, NULL, inst, NULL);
-	SendMessage(status_bar, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Disconnected"));
+	status_bar = CreateWindow(STATUSCLASSNAME, NULL, WS_CHILD | WS_VISIBLE,
+							  0, 0, 0, 0, window, NULL, inst, NULL);
 
-	// Show window and force a paint.
-	ShowWindow(window, cmd_show);
+	SendMessage(status_bar, SB_SETPARTS, 2, (LPARAM) widths);
+	SendMessage(status_bar, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Disconnected"));
+	SendMessage(status_bar, SB_SETTEXT, 1, (LPARAM) TEXT("Entire"));
+
+	list = CreateWindow(WC_LISTVIEW, NULL,
+						WS_VISIBLE | WS_CHILD | WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_NOSORTHEADER |
+						LVS_SHOWSELALWAYS,
+						260, 0, 250 + scrollbar_width, 120, window, (HMENU) ID_TRACKS, inst, 0);
+
+	ListView_SetExtendedListViewStyle(list, LVS_EX_FULLROWSELECT);
+	lhead = ListView_GetHeader(list);
+
+	ListViewOriginalProc = (WNDPROC) SetWindowLong(lhead, GWLP_WNDPROC, (INT_PTR) ListViewProc);
+
+	col.mask = LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM;
+	col.iSubItem = NAME;
+	col.cx = 100;
+	col.pszText = TEXT("Name");
+	ListView_InsertColumn(list, NAME, &col);
+
+	col.iSubItem = START_TEXT;
+	col.cx = 75;
+	col.pszText = TEXT("Start");
+	ListView_InsertColumn(list, START_TEXT, &col);
+
+	col.iSubItem = STOP_TEXT;
+	col.cx = 75;
+	col.pszText = TEXT("Stop");
+	ListView_InsertColumn(list, STOP_TEXT, &col);
+
+	col.mask = LVCF_SUBITEM | LVCF_WIDTH;
+	col.iSubItem = START;
+	col.cx = 0;
+	ListView_InsertColumn(list, START, &col);
+
+	col.mask = LVCF_SUBITEM | LVCF_WIDTH;
+	col.iSubItem = STOP;
+	col.cx = 0;
+	ListView_InsertColumn(list, STOP, &col);
+
+	FillList(list, NULL);
+
+	/*
+	 * Show window and force a paint.
+	 */
+	ShowWindow(window, cmdShow);
 	UpdateWindow(window);
 
 
-	//the lazy way
+	/*
+	 * the lazy way
+	 */
 	obj->window = window;
 	obj->group = group;
 	obj->pause = pause;
 	obj->play = play;
-	obj->status_bar = status_bar;
+	obj->statusBar = status_bar;
 	obj->stop = stop;
 	obj->time = time;
+	obj->list = list;
+
+	tlist = list; ///EEEEEEEEHHHHHH
 
 	return 0;
 }

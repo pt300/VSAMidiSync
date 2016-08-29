@@ -1,11 +1,11 @@
-//
-// Created by patryk on 28.06.16.
-//
+/*
+ * Created by patryk on 28.06.16.
+ */
 
 #include "MIDI.h"
 
-size_t MIDI_listDevices(HWND list) {
-	size_t count, i, lcnt;
+UINT MIDI_listDevices(HWND list) {
+	UINT count, i, lcnt;
 	MIDIOUTCAPS device;
 	MMRESULT res;
 
@@ -27,7 +27,7 @@ size_t MIDI_listDevices(HWND list) {
 }
 
 INT32 MIDI_getDeviceByName(LPWSTR name) {
-	size_t count, i;
+	UINT count, i;
 	MIDIOUTCAPS device;
 	MMRESULT res;
 
