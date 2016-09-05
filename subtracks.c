@@ -18,6 +18,10 @@ static long GetNum(FILE *stream) {
 		out += ch - '0';
 	}
 
+	if(ch == '\r') {
+		ch = fgetwc(stream);
+	}
+
 	if((ch == ' ' || ch == '\n') && out < 3348000) {
 		return out;
 	}
@@ -26,11 +30,19 @@ static long GetNum(FILE *stream) {
 }
 
 BOOL GetStr(FILE *stream, WCHAR str[]) {
+	INT len;
 	memset(str, '\0', (S_NAMELEN + 1) * sizeof *str);
 
 	fgetws(str, S_NAMELEN, stream);
 
-	if(lstrlen(str) == 0) {
+	len = lstrlen(str);
+
+	if(len > 2 && str[len - 1] == '\n' && str[len - 2] == '\r') {
+		str[lstrlen(str) - 2] = '\0';
+		len -= 2;
+	}
+
+	if(len == 0) {
 		return FALSE;
 	}
 
@@ -56,7 +68,7 @@ BOOL VSBExists(LPWSTR path) {
  * TODO: error reporting maybe?
  */
 BOOL LoadVSBFile(subtracks_list *obj, LPWSTR path) {
-	WCHAR mpath[MAX_PATH], magic[5];
+	WCHAR mpath[MAX_PATH], magic[6];
 	subtrack *track;
 	FILE *file;
 	UINT alloc;
@@ -69,12 +81,12 @@ BOOL LoadVSBFile(subtracks_list *obj, LPWSTR path) {
 	mpath[lstrlen(mpath) - 1] = 'b';
 
 	if(!PathFileExists(mpath) ||
-	   ((file = _wfopen(mpath, TEXT("rtS, ccs=ASCII"))) == NULL)) {
+	   ((file = _wfopen(mpath, TEXT("rb"))) == NULL)) {
 		return FALSE;
 	}
 
-	if((fgetws(magic, 5, file) == NULL) ||
-	   (StrCmp(TEXT("VSB\n"), magic) != 0)) {
+	if((fgetws(magic, 6, file) == NULL) ||
+	   (StrCmp(TEXT("\xfeffVSB\r\n"), magic) != 0)) {
 		fclose(file);
 		return FALSE;
 	}
@@ -121,16 +133,17 @@ BOOL SaveVSBFile(subtracks_list *obj, LPWSTR path) {
 		return FALSE;
 	}
 
-	if(((file = _wfopen(path, TEXT("wtS, ccs=ASCII"))) == NULL)) {
+	if(((file = _wfopen(path, TEXT("wb"))) == NULL)) {
 		return FALSE;
 	}
-	if(fputs("VSB\n", file) == EOF) {
+	if(fputws(L"\xfeffVSB\r\n", file) == EOF) {
 		fclose(file);
 		return FALSE;
 	}
 
 	for(cnt = 0; cnt < obj->length; cnt++) {
-		fprintf(file, "%li %li\n%1.21ls\n", obj->tracks[cnt]->start, obj->tracks[cnt]->stop, obj->tracks[cnt]->name);
+		fwprintf(file, L"%li %li\r\n%1.21ls\r\n", obj->tracks[cnt]->start, obj->tracks[cnt]->stop,
+				obj->tracks[cnt]->name);
 	}
 
 	fclose(file);
