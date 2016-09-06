@@ -28,7 +28,7 @@ enum columns {
 HRESULT GetVSAPath(LPWSTR path);
 HRESULT GetMIDIName(LPWSTR name);
 HRESULT OpenDialog(HWND parent, LPWSTR path, LPCWSTR filter);
-HRESULT SaveDialog(HWND parent, LPWSTR path, LPCWSTR filter);
+HRESULT SaveDialog(HWND parent, LPWSTR path, LPCWSTR filter, LPCWSTR ext);
 HRESULT SetMIDIName(LPWSTR name);
 void FillList(HWND list, subtracks_list *obj);
 void LongIntoString(LONG number, LPWSTR str);

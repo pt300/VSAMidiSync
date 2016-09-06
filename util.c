@@ -30,7 +30,7 @@ HRESULT OpenDialog(HWND parent, LPWSTR path, LPCWSTR filter) {
 /*
  * I could put it in one function, but hell, who cares?
  */
-HRESULT SaveDialog(HWND parent, LPWSTR path, LPCWSTR filter) {
+HRESULT SaveDialog(HWND parent, LPWSTR path, LPCWSTR filter, LPCWSTR ext) {
 	OPENFILENAME ofn;
 
 	ZeroMemory(&ofn, sizeof(ofn));
@@ -44,6 +44,7 @@ HRESULT SaveDialog(HWND parent, LPWSTR path, LPCWSTR filter) {
 	ofn.lpstrInitialDir = NULL;
 	ofn.lpstrFileTitle = NULL;
 	ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+	ofn.lpstrDefExt = ext;
 
 	if(GetSaveFileName(&ofn))
 		return S_OK;

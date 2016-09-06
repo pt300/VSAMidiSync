@@ -68,7 +68,7 @@ BOOL VSBExists(LPWSTR path) {
  * TODO: error reporting maybe?
  */
 BOOL LoadVSBFile(subtracks_list *obj, LPWSTR path) {
-	WCHAR mpath[MAX_PATH], magic[6];
+	WCHAR mpath[MAX_PATH], magic[7];
 	subtrack *track;
 	FILE *file;
 	UINT alloc;
@@ -85,7 +85,7 @@ BOOL LoadVSBFile(subtracks_list *obj, LPWSTR path) {
 		return FALSE;
 	}
 
-	if((fgetws(magic, 6, file) == NULL) ||
+	if((fgetws(magic, 7, file) == NULL) ||
 	   (StrCmp(TEXT("\xfeffVSB\r\n"), magic) != 0)) {
 		fclose(file);
 		return FALSE;
@@ -124,16 +124,17 @@ BOOL LoadVSBFile(subtracks_list *obj, LPWSTR path) {
 
 BOOL SaveVSBFile(subtracks_list *obj, LPWSTR path) {
 	FILE *file;
+	WCHAR mpath[MAX_PATH];
 	UCHAR cnt;
 
-	lstrcpy(path, path);
-	path[lstrlen(path) - 1] = 'b';
+	lstrcpy(mpath, path);
+	mpath[lstrlen(mpath) - 1] = 'b';
 
 	if(obj->length < 0) {
 		return FALSE;
 	}
 
-	if(((file = _wfopen(path, TEXT("wb"))) == NULL)) {
+	if(((file = _wfopen(mpath, TEXT("wb"))) == NULL)) {
 		return FALSE;
 	}
 	if(fputws(L"\xfeffVSB\r\n", file) == EOF) {
@@ -142,8 +143,10 @@ BOOL SaveVSBFile(subtracks_list *obj, LPWSTR path) {
 	}
 
 	for(cnt = 0; cnt < obj->length; cnt++) {
-		fwprintf(file, L"%li %li\r\n%1.21ls\r\n", obj->tracks[cnt]->start, obj->tracks[cnt]->stop,
-				obj->tracks[cnt]->name);
+		if(fwprintf(file, L"%li %li\r\n%1.21ls\r\n", obj->tracks[cnt]->start, obj->tracks[cnt]->stop,
+				obj->tracks[cnt]->name) < 0) {
+			return FALSE;
+		}
 	}
 
 	fclose(file);

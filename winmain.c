@@ -149,7 +149,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 				case ADD_STRACK:
 					if(!AddSubtrack(&list, ((subtrack *) msg.lParam)->start, ((subtrack *) msg.lParam)->stop,
 									((subtrack *) msg.lParam)->name)) {
-						MessageBox(win.window, TEXT("127 subtracks is the limit."),
+						MessageBox(win.window, TEXT("125 subtracks is the limit."),
 								   TEXT("Add subtrack"), MB_ICONERROR | MB_OK);
 						break;
 					}
@@ -233,6 +233,10 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 							   LoadVSBFile(&list, file_path)) {
 								FillList(win.list, &list);
 							}
+							else {
+								MessageBox(win.window, TEXT("Failed loading VSB file."),
+										   TEXT("Welp"), MB_OK | MB_ICONWARNING);
+							}
 							break;
 						case ID_FILE_SAVE_T:
 							if(list.length < 1) {
@@ -258,16 +262,16 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 										   TEXT("Welp"), MB_OK | MB_ICONINFORMATION);
 								break;
 							}
-							if(SaveDialog(win.window, file_path, VSBFILTER)) {
-								if(!SaveVSBFile(&list, file_path)) {
+							if(SaveDialog(win.window, file_path, VSBFILTER, L"VSB") == S_OK) {
+								if(SaveVSBFile(&list, file_path) == FALSE) {
 									MessageBox(win.window, TEXT("Failed saving subtracks."),
 											   TEXT("Save error"), MB_OK | MB_ICONERROR);
 									break;
 								}
+								AintNoChanges();
 								if(msg.lParam != 0) {
 									PostMessage(win.window, WM_CLOSE, 0, 0);
 								}
-								AintNoChanges();
 							}
 							break;
 						case ID_STOP:
