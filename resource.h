@@ -33,11 +33,12 @@
 #define ID_FILE_SAVE_T                 40020
 #define ID_FILE_SAVE_TA                40021
 #define ID_LOOP                        40022
+#define ID_IDLE                        40023
 
 #define CANCER                         40030
 #define DEF_CANCER                     40031
 #define ADD_STRACK                     40032
-#define SWAP_STRACKS                    40033
+#define SWAP_STRACKS                   40033
 
 #ifndef IDC_STATIC
   #define IDC_STATIC                   -1

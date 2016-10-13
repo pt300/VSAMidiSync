@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <commctrl.h>
+#include <stdio.h>
 #include "AXCtrl.h"
 #include "subtracks.h"
 #include "callbacks.h"
@@ -83,7 +84,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 	}
 
 	/*
-	 * Prepare data for threads and start time thread
+	 * Prepare data for threads and start time and loop threads
 	 */
 	time_thread.isRunning = FALSE;
 	time_thread.shouldRun = TRUE;
@@ -104,6 +105,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 	loop_data.start = MIDI_BOTTOM;
 	loop_data.loop = FALSE;
 	loop_data.frame = &time_data.frame;
+	loop_data.idle = 0;
 
 	CreateThread(NULL, 0, LoopThread, &loop_thread, 0, NULL);
 
@@ -164,35 +166,62 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 				case WM_NOTIFY:
 					switch(LOWORD(msg.wParam)) {
 						case ID_TRACKS:
+							//printf("WM_NOTIFY FOR ID_TRACKS: %x\n", ((LPNMHDR) msg.lParam)->code);
 							switch(((LPNMHDR) msg.lParam)->code) {
+								/*
+								 * Have you ever heard windows is shit?
+								 * Yeah, it is.
+								 */
+								/* For Win XP */
 								case LVN_ITEMACTIVATE:
-									if(((LPNMITEMACTIVATE) msg.lParam)->iItem >= 0) {
-										/*
-										 * Apparently that struct gets overwritten when we send a message to ListView.
-										 * Figuring that out took me like a day.
-										 * WinApi is full of wonders.
-										 * Also we do it 2 times because we love WinApi and VSA ActiveX control thingy
-										 */
-										position = ((LPNMITEMACTIVATE) msg.lParam)->iItem;
+								/* For Win 10
+								 * TODO: Find out what these even are
+								 */
+								case 0x76f1c41f:
+								case 0x1c0001:
+								case 0x11c0001:
 
-										ListView_GetItemText(win.list, position, START, txt_buf, 51);
-										time = LongFromString(txt_buf);
-										loop_data.start = time;
+									//if(((LPNMITEMACTIVATE) msg.lParam)->iItem >= 0) {
 
-										ListView_GetItemText(win.list, position, STOP, txt_buf, 51);
-										time2 = LongFromString(txt_buf);
-										loop_data.stop = time2;
+									//printf("LVN_ITEMACTIVATE");
+									//position = ((LPNMITEMACTIVATE) msg.lParam)->iItem;
 
-										SetVSARange(&ctrl, time, time2);
+									position = ListView_GetNextItem(win.list, -1, LVNI_SELECTED);
 
-										ListView_GetItemText(win.list, position, NAME, txt_buf, 51);
-										SendMessage(win.statusBar, SB_SETTEXT, 1, (LPARAM) txt_buf);
-										if(time_data.playing) {
-											AX_callMethod(&ctrl, TEXT("Stop"), VT_NULL, NULL, NULL);
-											AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE,
-														  NULL);
-										}
+									/*
+									 * Stopping thread and playback prevents VSA from crashing.
+									 */
+
+									loop_thread.shouldRun = FALSE;
+									while(loop_thread.isRunning);
+
+									AX_callMethod(&ctrl, TEXT("Stop"), VT_NULL, NULL, NULL);
+
+									ListView_GetItemText(win.list, position, START, txt_buf, 51);
+									time = LongFromString(txt_buf);
+									loop_data.start = time;
+
+									ListView_GetItemText(win.list, position, STOP, txt_buf, 51);
+									time2 = LongFromString(txt_buf);
+									loop_data.stop = time2;
+
+									if(loop_data.idle) {
+										loop_data.idle = 1;
 									}
+
+									SetVSARange(&ctrl, time, time2);
+
+									ListView_GetItemText(win.list, position, NAME, txt_buf, 51);
+									SendMessage(win.statusBar, SB_SETTEXT, 1, (LPARAM) txt_buf);
+									if(time_data.playing) {
+										AX_callMethod(&ctrl, TEXT("Stop"), VT_NULL, NULL, NULL);
+										AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE,
+													  NULL);
+									}
+
+									loop_thread.shouldRun = TRUE;
+									CreateThread(NULL, 0, LoopThread, &loop_thread, 0, NULL);
+									//}
 									break;
 								default:
 									break;
@@ -339,6 +368,26 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 								loop_data.loop = TRUE;
 							}
 							break;
+						case ID_IDLE:
+							if(GetMenuState(menu, ID_IDLE, MF_BYCOMMAND) & MF_CHECKED) {
+								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_UNCHECKED);
+								loop_data.idle = 0;
+							}
+							else {
+								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_CHECKED);
+								position = ListView_GetNextItem(win.list, -1, LVNI_SELECTED);
+
+								ListView_GetItemText(win.list, position, START, txt_buf, 51);
+								time = LongFromString(txt_buf);
+								loop_data.idleStart = time;
+
+								ListView_GetItemText(win.list, position, STOP, txt_buf, 51);
+								time2 = LongFromString(txt_buf);
+								loop_data.idleStop = time2;
+
+								loop_data.idle = 1;
+							}
+							break;
 						default:
 							TranslateMessage(&msg);
 							DispatchMessage(&msg);
@@ -454,7 +503,6 @@ int ConstructMainWindow(main_window *obj, HINSTANCE inst, int cmdShow) {
 
 	ListView_SetExtendedListViewStyle(list, LVS_EX_FULLROWSELECT);
 	lhead = ListView_GetHeader(list);
-
 	ListViewOriginalProc = (WNDPROC) SetWindowLong(lhead, GWLP_WNDPROC, (INT_PTR) ListViewProc);
 
 	col.mask = LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM;

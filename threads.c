@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <commctrl.h>
 #include "threads.h"
+#include "util.h"
 
 DWORD WINAPI TimeThread(LPVOID data) {
 	thread_data *thread = data;
@@ -107,7 +108,7 @@ DWORD WINAPI MidiThread(LPVOID data) {
 
 	thread->isRunning = FALSE;
 
-	SendMessage(vars->status, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Disconnected"));	//creative
+	SendMessage(vars->status, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Disconnected")); //creative
 
 	return 0;
 }
@@ -127,9 +128,19 @@ DWORD WINAPI LoopThread(LPVOID data) {
 			continue;
 		}
 		frame = *vars->frame;
-		if(vars->loop) {
-			if(frame >= vars->stop || frame < vars->start) {
+		/*
+		 * Possible race condition?
+		 * NAAAH
+		 */
+		if(frame >= vars->stop || frame < vars->start) {
+			if(vars->loop || vars->idle == 2) {
 				AX_callMethod(vars->ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE, NULL);
+			}
+			else if(vars->idle == 1) {
+				vars->idle = 2;
+				SetVSARange(vars->ctrl, vars->idleStart, vars->idleStop);
+				AX_callMethod(vars->ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE, NULL);
+
 			}
 		}
 	}

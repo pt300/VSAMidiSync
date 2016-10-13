@@ -27,6 +27,7 @@ IDR_MAINMENU MENU
     POPUP "&Play"
     {
         MENUITEM "&Loop", ID_LOOP
+        MENUITEM "&Idle loop", ID_IDLE
     }
     POPUP "&Edit"
     {

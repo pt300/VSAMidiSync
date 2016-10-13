@@ -10,8 +10,8 @@
 BOOLEAN changes = FALSE;
 
 static long GetNum(FILE *stream) {
-	wchar_t ch;
-	long out;
+	WCHAR ch;
+	LONG out;
 
 	for(out = 0, ch = fgetwc(stream); ch >= '0' && ch <= '9' && out < 3348000; ch = fgetwc(stream)) {
 		out *= 10;
@@ -29,7 +29,7 @@ static long GetNum(FILE *stream) {
 	return -1;
 }
 
-BOOL GetStr(FILE *stream, WCHAR str[]) {
+static BOOL GetStr(FILE *stream, WCHAR str[]) {
 	INT len;
 	memset(str, '\0', (S_NAMELEN + 1) * sizeof *str);
 

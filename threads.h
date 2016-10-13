@@ -39,6 +39,9 @@ typedef struct {
 	volatile long start;
 	volatile long stop;
 	volatile BOOL loop;
+	volatile char idle;
+	volatile long idleStart;
+	volatile long idleStop;
 } loop_thread_data;
 
 
