@@ -264,7 +264,7 @@ INT_PTR CALLBACK MIDIChooserProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	return (INT_PTR) FALSE;
 }
 
-INT_PTR CALLBACK ListViewProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+INT_PTR CALLBACK ListViewHeaderProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	switch(msg) {
 		/*
 		 * Stop the header from changing to the "change column width mouse cursor"
@@ -284,7 +284,7 @@ INT_PTR CALLBACK ListViewProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	/*
 	 * Send all other messages to the ListViews original WndProc - THIS IS IMPORTANT
 	 */
-	return CallWindowProc(ListViewOriginalProc, hWnd, msg, wParam, lParam);
+	return CallWindowProc(ListViewHeaderOriginalProc, hWnd, msg, wParam, lParam);
 }
 
 INT_PTR CALLBACK AddSubtrackProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {

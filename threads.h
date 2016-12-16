@@ -24,6 +24,8 @@ typedef struct {
 typedef struct {
 	volatile long *frame;
 	volatile BOOL *playing;
+	HANDLE img_midi_off;
+	HANDLE img_midi_on;
 	HWND status;
 	UINT device;
 } midi_thread_data;
@@ -42,6 +44,9 @@ typedef struct {
 	volatile char idle;
 	volatile long idleStart;
 	volatile long idleStop;
+	INT *current_track;
+	INT *looping_one;
+	HWND list;
 } loop_thread_data;
 
 

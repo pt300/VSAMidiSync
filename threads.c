@@ -77,11 +77,13 @@ DWORD WINAPI MidiThread(LPVOID data) {
 
 	thread->isRunning = TRUE;
 
-	SendMessage(vars->status, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Connected"));    //creative
+	//SendMessage(vars->status, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Connected"));    //creative
+	SendMessage(vars->status, SB_SETICON, MIDI_CELL, (LPARAM) vars->img_midi_on);
 
 	timeBeginPeriod(33);
 	/*
 	 * TODO: think about preserving calculated time values. We use them in 2 places after all.
+	 * Modulo is expensive, you fuck
 	 */
 	while(thread->shouldRun) {
 		Sleep(33);
@@ -108,7 +110,8 @@ DWORD WINAPI MidiThread(LPVOID data) {
 
 	thread->isRunning = FALSE;
 
-	SendMessage(vars->status, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Disconnected")); //creative
+	//SendMessage(vars->status, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Disconnected")); //creative
+	SendMessage(vars->status, SB_SETICON, MIDI_CELL, (LPARAM) vars->img_midi_off);
 
 	return 0;
 }
@@ -128,10 +131,6 @@ DWORD WINAPI LoopThread(LPVOID data) {
 			continue;
 		}
 		frame = *vars->frame;
-		/*
-		 * Possible race condition?
-		 * NAAAH
-		 */
 		if(frame >= vars->stop || frame < vars->start) {
 			if(vars->loop || vars->idle == 2) {
 				AX_callMethod(vars->ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE, NULL);
@@ -140,7 +139,8 @@ DWORD WINAPI LoopThread(LPVOID data) {
 				vars->idle = 2;
 				SetVSARange(vars->ctrl, vars->idleStart, vars->idleStop);
 				AX_callMethod(vars->ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE, NULL);
-
+				*vars->current_track = *vars->looping_one;
+				SetStates(vars->list, *vars->current_track, *vars->looping_one);
 			}
 		}
 	}

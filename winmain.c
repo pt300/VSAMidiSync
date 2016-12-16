@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <stdio.h>
+#include <compstui.h>
 #include "AXCtrl.h"
 #include "subtracks.h"
 #include "callbacks.h"
@@ -13,6 +14,7 @@
 
 typedef struct {
 	HWND window, group, time, play, pause, stop, statusBar, list, expand;
+	HMENU rmb_menu;
 } main_window;
 
 int ConstructMainWindow(main_window *obj, HINSTANCE inst, int cmdShow);
@@ -34,6 +36,10 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 	INT32 midi_id;
 	AX_object ctrl;
 	subtracks_list list;
+	POINT cursor;
+	HANDLE loop_img;
+	INT current_track = 0;
+	INT looping_track = -1;
 	SHORT window = 1;
 	/*
 	 * 0 - Normal
@@ -55,6 +61,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 	 */
 
 	scrollbar_width = GetSystemMetrics(SM_CXVSCROLL);
+	loop_img = LoadImage(inst, MAKEINTRESOURCE(IDI_LOOP), IMAGE_ICON, 15, 15, LR_DEFAULTCOLOR);
 
 	AX_init();
 
@@ -106,6 +113,9 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 	loop_data.loop = FALSE;
 	loop_data.frame = &time_data.frame;
 	loop_data.idle = 0;
+	loop_data.current_track = &current_track;
+	loop_data.looping_one = &looping_track;
+	loop_data.list = win.list;
 
 	CreateThread(NULL, 0, LoopThread, &loop_thread, 0, NULL);
 
@@ -116,6 +126,10 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 	midi_data.frame = &time_data.frame;
 	midi_data.device = 0;
 	midi_data.status = win.statusBar;
+	midi_data.img_midi_on = LoadImage(inst, MAKEINTRESOURCE(IDI_MIDI_ON), IMAGE_ICON, 13, 13, LR_DEFAULTCOLOR);
+	midi_data.img_midi_off = LoadImage(inst, MAKEINTRESOURCE(IDI_MIDI_OFF), IMAGE_ICON, 13, 13, LR_DEFAULTCOLOR);
+
+	SendMessage(win.statusBar, SB_SETICON, MIDI_CELL, (LPARAM) midi_data.img_midi_off);
 
 	if(!GetMIDIName(midi_name)) {
 		if((midi_id = MIDI_getDeviceByName(midi_name)) > -1) {
@@ -156,6 +170,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 						break;
 					}
 					FillList(win.list, &list);
+					SetStates(win.list, current_track, looping_track);
 					MakeChanges();
 					free((subtrack *) msg.lParam);
 					break;
@@ -168,15 +183,29 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 						case ID_TRACKS:
 							//printf("WM_NOTIFY FOR ID_TRACKS: %x\n", ((LPNMHDR) msg.lParam)->code);
 							switch(((LPNMHDR) msg.lParam)->code) {
-								/*
-								 * Have you ever heard windows is shit?
-								 * Yeah, it is.
-								 */
-								/* For Win XP */
+								case NM_RCLICK:
+									GetCursorPos(&cursor);
+
+									CheckMenuItem(win.rmb_menu, ID_LOOP,
+												  MF_BYCOMMAND | (loop_data.loop ? MF_CHECKED : MF_UNCHECKED));
+									CheckMenuItem(win.rmb_menu, ID_IDLE,
+												  MF_BYCOMMAND | (loop_data.idle != 0 ? MF_CHECKED : MF_UNCHECKED));
+
+									TrackPopupMenu((HMENU) GetSubMenu(win.rmb_menu, 0),
+												   TPM_LEFTALIGN | TPM_RIGHTBUTTON, cursor.x, cursor.y, 0, win.window,
+												   NULL);
+
+
+									break;
+									/*
+									 * Have you ever heard windows is shit?
+									 * Yeah, it is.
+									 */
+									/* For Win XP */
 								case LVN_ITEMACTIVATE:
-								/* For Win 10
-								 * TODO: Find out what these even are
-								 */
+									/* For Win 10
+									 * TODO: Find out what these even are
+									 */
 								case 0x76f1c41f:
 								case 0x1c0001:
 								case 0x11c0001:
@@ -205,14 +234,17 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 									time2 = LongFromString(txt_buf);
 									loop_data.stop = time2;
 
+									current_track = position;
+									SetStates(win.list, position, looping_track);
+
 									if(loop_data.idle) {
 										loop_data.idle = 1;
 									}
 
 									SetVSARange(&ctrl, time, time2);
 
-									ListView_GetItemText(win.list, position, NAME, txt_buf, 51);
-									SendMessage(win.statusBar, SB_SETTEXT, 1, (LPARAM) txt_buf);
+									//ListView_GetItemText(win.list, position, NAME, txt_buf, 51);
+									//SendMessage(win.statusBar, SB_SETTEXT, 1, (LPARAM) txt_buf);
 									if(time_data.playing) {
 										AX_callMethod(&ctrl, TEXT("Stop"), VT_NULL, NULL, NULL);
 										AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE,
@@ -261,8 +293,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 							if(VSBExists(file_path) &&
 							   LoadVSBFile(&list, file_path)) {
 								FillList(win.list, &list);
-							}
-							else {
+							} else {
 								MessageBox(win.window, TEXT("Failed loading VSB file."),
 										   TEXT("Welp"), MB_OK | MB_ICONWARNING);
 							}
@@ -317,8 +348,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 						case ID_PLAY:
 							if(time_data.frame >= loop_data.start && time_data.frame < loop_data.stop) {
 								AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 6, VT_BOOL, FALSE, NULL);
-							}
-							else {
+							} else {
 								AX_callMethod(&ctrl, TEXT("Play"), VT_NULL, NULL, VT_I2, 5, VT_BOOL, FALSE, NULL);
 							}
 							break;
@@ -332,12 +362,23 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 										   TEXT("Remove subtrack"), MB_ICONERROR | MB_OK);
 								break;
 							}
-							RemoveSubtrack(&list, (UCHAR) --position);
+							RemoveSubtrack(&list, (UCHAR) (position - 1));
+							if(position == current_track) {
+								current_track = 0;
+							} else if(position < current_track) {
+								current_track--;
+							}
+							if(position == looping_track) {
+								looping_track = -1;
+								loop_data.idle = 0;
+							} else if(position < looping_track) {
+								looping_track--;
+							}
 							FillList(win.list, &list);
+							SetStates(win.list, current_track, looping_track);
 							if(list.length < 1) {
 								AintNoChanges();
-							}
-							else {
+							} else {
 								MakeChanges();
 							}
 							break;
@@ -351,10 +392,9 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_UNCHECKED);
 								SetWindowPos(win.window, NULL, 0, 0, 265, 165,
 											 SWP_NOMOVE | SWP_NOREPOSITION | SWP_NOZORDER);
-							}
-							else {
+							} else {
 								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_CHECKED);
-								SetWindowPos(win.window, NULL, 0, 0, 265 + 250 + scrollbar_width, 165,
+								SetWindowPos(win.window, NULL, 0, 0, 265 + 250 + scrollbar_width + 15, 165,
 											 SWP_NOMOVE | SWP_NOREPOSITION | SWP_NOZORDER);
 							}
 							break;
@@ -362,18 +402,19 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 							if(GetMenuState(menu, ID_LOOP, MF_BYCOMMAND) & MF_CHECKED) {
 								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_UNCHECKED);
 								loop_data.loop = FALSE;
-							}
-							else {
+								SendMessage(win.statusBar, SB_SETICON, LOOP_CELL, (LPARAM) NULL);
+							} else {
 								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_CHECKED);
 								loop_data.loop = TRUE;
+								SendMessage(win.statusBar, SB_SETICON, LOOP_CELL, (LPARAM) loop_img);
 							}
 							break;
 						case ID_IDLE:
 							if(GetMenuState(menu, ID_IDLE, MF_BYCOMMAND) & MF_CHECKED) {
 								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_UNCHECKED);
 								loop_data.idle = 0;
-							}
-							else {
+								looping_track = -1;
+							} else {
 								CheckMenuItem(menu, LOWORD(msg.wParam), MF_BYCOMMAND | MF_CHECKED);
 								position = ListView_GetNextItem(win.list, -1, LVNI_SELECTED);
 
@@ -386,7 +427,10 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_line, int cmd_
 								loop_data.idleStop = time2;
 
 								loop_data.idle = 1;
+
+								looping_track = position;
 							}
+							SetStates(win.list, current_track, looping_track);
 							break;
 						default:
 							TranslateMessage(&msg);
@@ -423,7 +467,7 @@ int ConstructMainWindow(main_window *obj, HINSTANCE inst, int cmdShow) {
 	HWND window, group, time, play, pause, stop, status_bar, list, lhead;
 	HFONT leFont;
 	LVCOLUMN col;
-	INT widths[] = {130, -1};
+	INT widths[] = {220, 240, -1}; //130, 265
 
 	InitCommonControls();
 
@@ -492,20 +536,26 @@ int ConstructMainWindow(main_window *obj, HINSTANCE inst, int cmdShow) {
 	status_bar = CreateWindow(STATUSCLASSNAME, NULL, WS_CHILD | WS_VISIBLE,
 							  0, 0, 0, 0, window, NULL, inst, NULL);
 
-	SendMessage(status_bar, SB_SETPARTS, 2, (LPARAM) widths);
-	SendMessage(status_bar, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Disconnected"));
-	SendMessage(status_bar, SB_SETTEXT, 1, (LPARAM) TEXT("Entire"));
+	SendMessage(status_bar, SB_SETPARTS, CELLS_NUMBER, (LPARAM) widths);
+	//SendMessage(status_bar, SB_SETTEXT, 0, (LPARAM) TEXT("MIDI: Disconnected"));
+	//SendMessage(status_bar, SB_SETTEXT, 1, (LPARAM) TEXT("Entire"));
+	SendMessage(status_bar, SB_SETTEXT, HELLIFIKNEW, (LPARAM) TEXT("A baby spider is called a spiderling."));
 
 	list = CreateWindow(WC_LISTVIEW, NULL,
 						WS_VISIBLE | WS_CHILD | WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_NOSORTHEADER |
 						LVS_SHOWSELALWAYS,
-						260, 0, 250 + scrollbar_width, 120, window, (HMENU) ID_TRACKS, inst, 0);
+						260, 0, 250 + scrollbar_width + 15, 120, window, (HMENU) ID_TRACKS, inst, 0);
 
 	ListView_SetExtendedListViewStyle(list, LVS_EX_FULLROWSELECT);
 	lhead = ListView_GetHeader(list);
-	ListViewOriginalProc = (WNDPROC) SetWindowLong(lhead, GWLP_WNDPROC, (INT_PTR) ListViewProc);
+	ListViewHeaderOriginalProc = (WNDPROC) SetWindowLong(lhead, GWLP_WNDPROC, (INT_PTR) ListViewHeaderProc);
 
 	col.mask = LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM;
+	col.iSubItem = STATE;
+	col.cx = 15;
+	col.pszText = TEXT("");
+	ListView_InsertColumn(list, STATE, &col);
+
 	col.iSubItem = NAME;
 	col.cx = 100;
 	col.pszText = TEXT("Name");
@@ -551,6 +601,7 @@ int ConstructMainWindow(main_window *obj, HINSTANCE inst, int cmdShow) {
 	obj->stop = stop;
 	obj->time = time;
 	obj->list = list;
+	obj->rmb_menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_RMBMENU));
 
 	tlist = list; ///EEEEEEEEHHHHHH
 

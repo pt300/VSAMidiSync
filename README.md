@@ -21,6 +21,7 @@ using ActiveX control (VSA Console.ocx). Also has few extras.
     Now run `regsvr32 "VSA Console.ocx"`. That's all.
     
 ## TODO
-- [ ] Add colours to indicate playing subtrack and idle loop one in list.
-- [ ] Rethink bottom bar.
-- [ ] Setting idle loop with RMB menu.
+- [*] Add colours to indicate playing subtrack and idle loop one in list. NAH
+- [*] Rethink bottom bar.
+- [*] >>Setting idle or normal loop with RMB menu.<< Not like I wanted it to be, but works.
+- [ ] Get PJ to actually test it.

@@ -7,6 +7,9 @@ IDI_APPICON ICON "icons/Application.ico"
 IDI_PLAY ICON "icons/play.ico"
 IDI_PAUSE ICON "icons/pause.ico"
 IDI_STOP ICON "icons/stop.ico"
+IDI_LOOP ICON "icons/loop.ico"
+IDI_MIDI_OFF ICON "icons/midi_off.ico"
+IDI_MIDI_ON ICON "icons/midi_on.ico"
 
 //Main window menu//
 LANGUAGE 0, SUBLANG_NEUTRAL
@@ -45,7 +48,15 @@ IDR_MAINMENU MENU
     }
 }
 
-
+LANGUAGE 0, SUBLANG_NEUTRAL
+IDR_RMBMENU MENU
+{
+    POPUP "NON"
+    {
+        MENUITEM "Loop", ID_LOOP
+        MENUITEM "Idle loop", ID_IDLE
+    }
+}
 
 // Application manifest.
 LANGUAGE 0, SUBLANG_NEUTRAL

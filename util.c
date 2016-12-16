@@ -159,13 +159,15 @@ void FillList(HWND list, subtracks_list *obj) {
 	WCHAR text[12];
 
 	item.mask = LVIF_TEXT;
-	item.pszText = TEXT("Entire");
+	item.pszText = STATE_PLAYING;
 	item.iItem = 0;
-	item.iSubItem = NAME;
+	item.iSubItem = STATE;
 
 	ListView_DeleteAllItems(list);
 
 	ListView_InsertItem(list, &item);
+
+	ListView_SetItemText(list, 0, NAME, TEXT("Entire"));
 
 	ListView_SetItemText(list, 0, START_TEXT, TEXT("00:00:00.00"));
 	ListView_SetItemText(list, 0, STOP_TEXT, TEXT("30:59:59.29"));
@@ -184,11 +186,13 @@ void FillList(HWND list, subtracks_list *obj) {
 	}
 
 	for(i = 0; i < obj->length; i++) {
-		item.pszText = obj->tracks[i]->name;
+		item.pszText = TEXT("");
 		item.iItem = i + 1;
-		item.iSubItem = NAME;
+		item.iSubItem = STATE;
 
 		ListView_InsertItem(list, &item);
+
+		ListView_SetItemText(list, i + 1, NAME, obj->tracks[i]->name);
 
 		wsprintf(text, L"%.2li:%.2li:%.2li.%.2li", obj->tracks[i]->start / (30 * 60 * 60),
 				 obj->tracks[i]->start / (30 * 60) % 60, obj->tracks[i]->start / 30 % 60, obj->tracks[i]->start % 30);
@@ -202,6 +206,15 @@ void FillList(HWND list, subtracks_list *obj) {
 
 		LongIntoString(obj->tracks[i]->stop, text);
 		ListView_SetItemText(list, i + 1, STOP, text);
+	}
+}
+
+void SetStates(HWND list, INT playing, INT looping) {
+	int i;
+
+	i = ListView_GetItemCount(list);
+	while(i--) {
+		ListView_SetItemText(list, i, STATE, i == playing ? STATE_PLAYING : i == looping ? STATE_LOOPING : TEXT(""));
 	}
 }
 

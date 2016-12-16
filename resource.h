@@ -4,6 +4,10 @@
 #define IDD_ABOUTDIALOG                104
 #define IDD_MIDICHOOSER                105
 #define IDD_ADDSUBTRACK                106
+#define IDR_RMBMENU                    107
+#define IDI_MIDI_OFF                   108
+#define IDI_MIDI_ON                    109
+#define IDI_LOOP                       110
 #define IDI_PLAY                       111
 #define IDI_PAUSE                      112
 #define IDI_STOP                       113
