@@ -64,7 +64,7 @@ LANGUAGE 0, SUBLANG_NEUTRAL
 
 LANGUAGE 0, SUBLANG_NEUTRAL
 1 VERSIONINFO
-    FILEVERSION     1,0,0,0
+    FILEVERSION     1,5,0,0
     PRODUCTVERSION  0,0,0,0
     FILEOS          VOS_NT
     FILETYPE        VFT_APP
@@ -80,10 +80,10 @@ LANGUAGE 0, SUBLANG_NEUTRAL
             VALUE "CompanyName", ""
             VALUE "FileDescription", "Utility to sync time in VSA with MIDI bus."
             VALUE "FileVersion", ""
-            VALUE "InternalName", ""
+            VALUE "InternalName", "Piece of crap"
             VALUE "LegalCopyright", "None"
             VALUE "LegalTrademarks", ""
-            VALUE "OriginalFilename", ""
+            VALUE "OriginalFilename", "VSAMidiSync.exe"
             VALUE "PrivateBuild", ""
             VALUE "ProductName", ""
             VALUE "ProductVersion", ""
